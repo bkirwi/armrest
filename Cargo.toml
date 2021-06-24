@@ -1,0 +1,21 @@
+[package]
+name = "armrest"
+version = "0.1.0"
+authors = ["Ben Kirwin <ben@kirw.in>"]
+edition = "2018"
+
+[dependencies]
+libremarkable = "0.4.3"
+tflite = { git = "https://github.com/bkirwi/tflite-rs", rev = "7d5a0d8a51378313dbe017c32299a51e002c06b5" }
+#tflite = { path = "../tflite-rs" }
+flo_curves = "0.4.1"
+lyon_geom = "0.17.0"
+partial_sort = "0.1.2"
+rusttype = "0.8.2"
+textwrap = "0.13.4"
+itertools = "0.10.0"
+strsim = "0.10.0"
+
+[dependencies.hyphenation]
+version = "0.8.0"
+features = ["embed_en-us"]

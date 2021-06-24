@@ -1,0 +1,7 @@
+.cargo
+.venv
+.ipynb_checkpoints
+data
+*.pyc
+access.json
+train.sh
