@@ -2,7 +2,7 @@ use crate::geom::BoundingBox;
 use libremarkable::cgmath::{InnerSpace, MetricSpace, Point2, Point3, Vector2, Vector3};
 use std::collections::BTreeSet;
 use std::fmt;
-use std::io;
+
 use std::ops::AddAssign;
 
 #[derive(Debug, Copy, Clone)]
@@ -203,7 +203,7 @@ impl Ink {
         for point in self.points.iter_mut() {
             point.x = (point.x - self.x_range.min) * ink_scale;
             point.y = (point.y - self.y_range.min) * ink_scale;
-            point.z = (point.z - self.t_range.min);
+            point.z = point.z - self.t_range.min;
         }
     }
 

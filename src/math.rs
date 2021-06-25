@@ -1,7 +1,7 @@
 use crate::ink::Ink;
 use libremarkable::cgmath::*;
 use std::cmp::Ordering;
-use std::ops::Div;
+
 
 fn xy(p: Point3<f32>) -> Point2<f32> {
     Point2::new(p.x, p.y)

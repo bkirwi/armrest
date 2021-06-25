@@ -6,7 +6,7 @@ use libremarkable::input::wacom::{WacomEvent, WacomPen};
 use libremarkable::input::InputEvent;
 use std::collections::HashMap;
 
-use lyon_geom::euclid::num::Zero;
+
 use std::mem;
 use std::time::Instant;
 

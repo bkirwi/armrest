@@ -1,20 +1,17 @@
 use std::fs;
 use std::sync::mpsc::channel;
 
+use libremarkable::cgmath::{EuclideanSpace, Point2};
 use libremarkable::framebuffer::{core, FramebufferDraw};
-use libremarkable::framebuffer::{FramebufferBase, FramebufferRefresh};
-use libremarkable::input::ev::EvDevContext;
-use libremarkable::input::multitouch::MultitouchEvent;
+use libremarkable::framebuffer::FramebufferBase;
 use libremarkable::input::{InputDevice, InputEvent};
+use libremarkable::input::ev::EvDevContext;
 use rusttype::Font;
 
+use armrest::{gesture, ui};
 use armrest::geom::BoundingBox;
 use armrest::gesture::{Gesture, Tool};
-use armrest::ink::Range;
-use armrest::ui::{Action, Screen, Widget, Frame};
-use armrest::{gesture, ui};
-use libremarkable::cgmath::{EuclideanSpace, Point2, Vector2};
-use libremarkable::framebuffer::common::*;
+use armrest::ui::{Screen, Widget};
 
 fn main() {
     let font_bytes =

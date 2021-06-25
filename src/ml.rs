@@ -5,11 +5,11 @@ use std::ops::{Add, Mul, Sub};
 
 use crate::ink::*;
 use crate::math;
-use crate::math::hausdorff_distance;
+
 use flo_curves::bezier::Curve;
 use flo_curves::{Coordinate, Coordinate3D};
 use libremarkable::cgmath::{
-    Angle, ElementWise, EuclideanSpace, InnerSpace, MetricSpace, Point3, Vector3,
+    Angle, ElementWise, EuclideanSpace, InnerSpace, Point3, Vector3,
 };
 use std::time::Instant;
 use tflite::ops::builtin::BuiltinOpResolver;
@@ -349,13 +349,13 @@ fn greedy_decode(buffer: &[f32]) -> String {
 
 pub trait LanguageModel {
     fn odds(&self, prefix: &str, ch: char) -> f32;
-    fn odds_end(&self, prefix: &str) -> f32 {
+    fn odds_end(&self, _prefix: &str) -> f32 {
         1.0
     }
 }
 
 impl LanguageModel for &[char] {
-    fn odds(&self, prefix: &str, ch: char) -> f32 {
+    fn odds(&self, _prefix: &str, ch: char) -> f32 {
         if self.contains(&ch) {
             1.0
         } else {
@@ -365,7 +365,7 @@ impl LanguageModel for &[char] {
 }
 
 impl LanguageModel for bool {
-    fn odds(&self, prefix: &str, _: char) -> f32 {
+    fn odds(&self, _prefix: &str, _: char) -> f32 {
         if *self {
             1.0
         } else {

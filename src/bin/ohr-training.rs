@@ -13,8 +13,8 @@ use libremarkable::cgmath::Point2;
 use libremarkable::framebuffer::refresh::PartialRefreshMode;
 use libremarkable::framebuffer::{FramebufferBase, FramebufferDraw};
 
-use libremarkable::input::multitouch::MultitouchEvent;
-use libremarkable::input::wacom::{WacomEvent, WacomPen};
+
+
 
 use armrest::{gesture, ml};
 use libremarkable::framebuffer::core::Framebuffer;

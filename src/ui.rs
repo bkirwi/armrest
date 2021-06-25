@@ -1,8 +1,8 @@
 pub use crate::geom::*;
-use crate::gesture;
+
 use crate::gesture::Touch;
 use crate::ink::Ink;
-use libremarkable::cgmath::{ElementWise, EuclideanSpace, Point2, Vector2};
+use libremarkable::cgmath::{EuclideanSpace, Point2, Vector2};
 use libremarkable::framebuffer::common::{
     color, display_temp, dither_mode, mxcfb_rect, waveform_mode, DISPLAYHEIGHT, DISPLAYWIDTH,
     DRAWING_QUANT_BIT,
@@ -11,13 +11,12 @@ use libremarkable::framebuffer::core::Framebuffer;
 use libremarkable::framebuffer::refresh::PartialRefreshMode;
 use libremarkable::framebuffer::{FramebufferDraw, FramebufferIO, FramebufferRefresh};
 use rusttype::{point, Font, PositionedGlyph, Scale};
-use std::cmp::Ordering;
+
 use std::collections::hash_map::DefaultHasher;
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
-use std::marker::PhantomData;
-use std::ops::{Add, Deref, DerefMut, IndexMut};
-use std::slice::SliceIndex;
+
+use std::ops::{Deref, DerefMut};
 use textwrap::core::Fragment;
 
 pub fn full_refresh(fb: &mut Framebuffer) {
@@ -624,7 +623,7 @@ impl<T> Stack<T> {
         self.widgets.clear();
     }
 
-    pub fn push(&mut self, mut widget: T)
+    pub fn push(&mut self, widget: T)
     where
         T: Widget,
     {
