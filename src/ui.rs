@@ -60,6 +60,7 @@ type ContentHash = u64;
 #[derive(Debug, Clone)]
 pub struct Node {
     children: Vec<(Split, i32, Node)>,
+    // TODO: should probably keep a dirty flag here instead of the box!
     content: ContentHash,
 }
 
@@ -100,7 +101,10 @@ impl<M> Handlers<M> {
         Handlers { handlers: vec![] }
     }
 
+    // TODO: should probably be Action -> impl Iterator<Item=(Action, M)> and do the translation
     pub fn query(&self, point: Point2<i32>) -> impl Iterator<Item = (BoundingBox, &M)> {
+        // Handlers get added "outside in" - so to get the nice "bubbling" callback order
+        // we iterate in reverse.
         self.handlers
             .iter()
             .rev()
@@ -342,7 +346,7 @@ impl Action {
 
 pub trait Widget {
     type Message;
-    fn bounds(&self) -> Vector2<i32>;
+    fn size(&self) -> Vector2<i32>;
     fn render(&self, sink: Frame<Self::Message>);
 }
 
@@ -502,7 +506,7 @@ impl<M: Clone> Widget for Text<'_, M> {
     // TODO: should be ! but that's unstable
     type Message = M;
 
-    fn bounds(&self) -> Vector2<i32> {
+    fn size(&self) -> Vector2<i32> {
         self.bounds
     }
 
@@ -567,7 +571,7 @@ impl<T> Stack<T> {
     where
         T: Widget,
     {
-        let shape = widget.bounds();
+        let shape = widget.size();
         self.widgets.push(widget);
         self.offset += shape.y;
     }
@@ -576,13 +580,13 @@ impl<T> Stack<T> {
 impl<T: Widget> Widget for Stack<T> {
     type Message = T::Message;
 
-    fn bounds(&self) -> Vector2<i32> {
+    fn size(&self) -> Vector2<i32> {
         self.bounds
     }
 
     fn render(&self, mut frame: Frame<T::Message>) {
         for widget in &self.widgets {
-            let split = widget.bounds().y;
+            let split = widget.size().y;
             widget.render(frame.split_off(Split::Top, split));
         }
     }
@@ -631,7 +635,7 @@ impl<A> InputArea<A> {
 impl<M: Clone> Widget for InputArea<M> {
     type Message = M;
 
-    fn bounds(&self) -> Vector2<i32> {
+    fn size(&self) -> Vector2<i32> {
         self.size
     }
 
@@ -736,8 +740,8 @@ impl<T: Widget> Paged<Stack<T>> {
         T: Widget,
     {
         let remaining = self.last().remaining();
-        if widget.bounds().y > remaining.y {
-            let bounds = self.last().bounds();
+        if widget.size().y > remaining.y {
+            let bounds = self.last().size();
             self.pages.push(Stack::new(bounds));
         }
         self.last_mut().push(widget);
@@ -750,8 +754,8 @@ where
 {
     type Message = T::Message;
 
-    fn bounds(&self) -> Vector2<i32> {
-        self.pages[self.current_page].bounds()
+    fn size(&self) -> Vector2<i32> {
+        self.pages[self.current_page].size()
     }
 
     fn render(&self, mut sink: Frame<T::Message>) {

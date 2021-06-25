@@ -63,7 +63,7 @@ fn main() {
                 screen.stroke(from, to);
             }
             Some(Gesture::Tap(touch)) => {
-                for m in handlers.query(touch.midpoint().map(|c| c as i32)) {
+                for (_, m) in handlers.query(touch.midpoint().map(|c| c as i32)) {
                     let message = ui::Text::layout(&font, &format!("Touched line {:?}", m), 44);
                     stack.push(message.on_touch(Some(*m)));
                 }
