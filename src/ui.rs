@@ -313,6 +313,63 @@ impl<'a, M> Frame<'a, M> {
             content: 0,
         }
     }
+
+    pub fn remaining(&self) -> Vector2<i32> {
+        self.bounds.size()
+    }
+
+    fn space(&mut self, a: Split, b: Split, extra: i32, ratio: f32) {
+        if extra > 0 {
+            let offset = (extra as f32 * ratio) as i32;
+            self.split_off(a, offset);
+            self.split_off(b, extra - offset);
+        }
+    }
+
+    pub fn horizontal_space(&mut self, width: i32, placement: f32) {
+        self.space(
+            Split::Left,
+            Split::Right,
+            self.remaining().x - width,
+            placement,
+        );
+    }
+
+    pub fn vertical_space(&mut self, height: i32, placement: f32) {
+        self.space(
+            Split::Top,
+            Split::Bottom,
+            self.remaining().y - height,
+            placement,
+        );
+    }
+
+    pub fn render_placed(
+        mut self,
+        widget: impl Widget<Message = M>,
+        horizontal_placement: f32,
+        vertical_placement: f32,
+    ) {
+        let size = widget.size();
+        self.vertical_space(size.y, vertical_placement);
+        self.horizontal_space(size.x, horizontal_placement);
+        widget.render(self)
+    }
+
+    pub fn render_split(
+        &mut self,
+        widget: impl Widget<Message = M>,
+        split: Split,
+        positioning: f32,
+    ) {
+        let amount = match split {
+            Split::Left | Split::Right => widget.size().x,
+            Split::Top | Split::Bottom => widget.size().y,
+        };
+
+        let widget_area = self.split_off(split, amount);
+        widget_area.render_placed(widget, positioning, positioning);
+    }
 }
 
 pub enum Action {
