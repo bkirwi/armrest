@@ -100,7 +100,6 @@ impl<M> Handlers<M> {
         Handlers { handlers: vec![] }
     }
 
-    // TODO: should probably be Action -> impl Iterator<Item=(Action, M)> and do the translation
     pub fn query(&self, point: Point2<i32>) -> impl Iterator<Item = (BoundingBox, &M)> {
         // Handlers get added "outside in" - so to get the nice "bubbling" callback order
         // we iterate in reverse.
@@ -273,11 +272,12 @@ impl<'a, M> Frame<'a, M> {
     }
 
     pub fn split_off(&mut self, split: Split, offset: i32) -> Frame<M> {
+        let size = self.bounds.size();
         let split_value = match split {
-            Split::Left => self.bounds.top_left.x + offset,
-            Split::Right => self.bounds.bottom_right.x - offset,
-            Split::Top => self.bounds.top_left.y + offset,
-            Split::Bottom => self.bounds.bottom_right.y - offset,
+            Split::Left => self.bounds.top_left.x + offset.min(size.x),
+            Split::Right => self.bounds.bottom_right.x - offset.min(size.x),
+            Split::Top => self.bounds.top_left.y + offset.min(size.y),
+            Split::Bottom => self.bounds.bottom_right.y - offset.min(size.y),
         };
 
         let should_truncate = self
@@ -345,7 +345,7 @@ impl<'a, M> Frame<'a, M> {
 
     pub fn render_placed(
         mut self,
-        widget: impl Widget<Message = M>,
+        widget: &impl Widget<Message = M>,
         horizontal_placement: f32,
         vertical_placement: f32,
     ) {
@@ -357,7 +357,7 @@ impl<'a, M> Frame<'a, M> {
 
     pub fn render_split(
         &mut self,
-        widget: impl Widget<Message = M>,
+        widget: &impl Widget<Message = M>,
         split: Split,
         positioning: f32,
     ) {
@@ -371,6 +371,7 @@ impl<'a, M> Frame<'a, M> {
     }
 }
 
+#[derive(Debug, Clone)]
 pub enum Action {
     Touch(Touch),
     Ink(Ink),
@@ -643,7 +644,7 @@ impl<T: Widget> Widget for Stack<T> {
     fn render(&self, mut frame: Frame<T::Message>) {
         for widget in &self.widgets {
             let split = widget.size().y;
-            widget.render(frame.split_off(Split::Top, split));
+            frame.render_split(widget, Split::Top, 0.0);
         }
     }
 }
