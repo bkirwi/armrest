@@ -27,7 +27,7 @@ data/inks/armrest-testset.txt: data/inks/armrest.txt script/training.py
 
 data/tensors/%.txt: data/inks/%.txt src/
 	mkdir -p data/tensors
-	cargo run --bin ink-to-tensor spline < data/inks/$*.txt > data/tensors/$*.txt
+	cargo run --release --bin ink-to-tensor spline < data/inks/$*.txt > data/tensors/$*.txt
 
 data/tensors/trainset.txt: data/tensors/iam-docdb-lines-0.txt data/tensors/iam-docdb-words-0.txt data/tensors/iam-docdb-lines-1.txt data/tensors/iam-docdb-words-1.txt data/tensors/iam-docdb-lines-2.txt data/tensors/iam-docdb-words-2.txt data/tensors/iam-ondb-trainset.txt data/tensors/armrest-trainset.txt
 	cat $^ > $@

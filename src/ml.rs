@@ -63,9 +63,9 @@ impl ModelInput<Spline> for Ink {
         }
         let mut normal = self.clone();
         normal.normalize(1.0);
-        normal.smooth();
+        // normal.smooth();
         normal = math::min_distance(&normal, 0.05);
-        normal = math::douglas_peucker(&normal, 0.01);
+        // normal = math::douglas_peucker(&normal, 0.01);
 
         let mut last_point = normal.points[0];
         for (i, (slice, point)) in buffer
