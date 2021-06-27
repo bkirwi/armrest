@@ -8,9 +8,7 @@ use crate::math;
 
 use flo_curves::bezier::Curve;
 use flo_curves::{Coordinate, Coordinate3D};
-use libremarkable::cgmath::{
-    Angle, ElementWise, EuclideanSpace, InnerSpace, Point3, Vector3,
-};
+use libremarkable::cgmath::{Angle, ElementWise, EuclideanSpace, InnerSpace, Point3, Vector3};
 use std::time::Instant;
 use tflite::ops::builtin::BuiltinOpResolver;
 use tflite::{FlatBufferModel, Interpreter, InterpreterBuilder};
@@ -66,8 +64,8 @@ impl ModelInput<Spline> for Ink {
         let mut normal = self.clone();
         normal.normalize(1.0);
         normal.smooth();
-        normal = math::douglas_peucker(&normal, 0.02);
-        // normal = math::min_distance(&normal, 0.5);
+        normal = math::min_distance(&normal, 0.05);
+        normal = math::douglas_peucker(&normal, 0.01);
 
         let mut last_point = normal.points[0];
         for (i, (slice, point)) in buffer

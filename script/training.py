@@ -200,6 +200,8 @@ def clean_iam_text(line):
             .replace("`", "'")
             .replace(" ,", ",")
             .replace(" .", ".")
+            .replace(" !", "!")
+            .replace(" ?", "?")
             .replace(" :", ":")
             .replace("n ' t", "n't")
             .replace(" ' s ", "'s ")
@@ -281,8 +283,9 @@ def load_docdb(data_dir, name, split_words=False):
 
     results = []
     for file in files:
-        if file == '856a.inkml':
-            # This file is specified in set 4 but doesn't seem to exist
+        # 856a is specified in set 4 but doesn't seem to exist
+        # 024 has vertical text in a way we don't care to support
+        if file in ['856a.inkml', '024.inkml']:
             continue
         tree = ElementTree.parse(os.path.join(data_dir, file))
 
@@ -400,6 +403,9 @@ def is_invalid(text, ink):
 
     if ' " ' in text or " ' " in text:
         return f"Suspiciously spaced quote in text: `{text}`"
+
+    if '#' in text:
+        return f"Discarding text containing # (used to represent a transcription error): `{text}`"
 
     return None
 
@@ -730,6 +736,14 @@ if __name__ == '__main__':
             import random
             random.shuffle(pairs)
 
+            cleaned = []
+            for line, ink in pairs:
+                if len(line) * 2 <= len(ink):
+                    cleaned.append((line, ink))
+                else:
+                    print(f"OH NO: ink too short for input `{line}` (ink len {len(ink)})")
+            pairs = cleaned
+
             lines_tensor = tf.ragged.constant([encode_string(p[0]) for p in pairs])
             inks_tensor = tf.ragged.constant([p[1] for p in pairs], dtype=tf.float32)
 
@@ -772,7 +786,7 @@ if __name__ == '__main__':
         print("Starting to train!")
         model.compile(
             optimizer=keras.optimizers.Adam(
-                learning_rate=0.001,
+                learning_rate=0.0001,
                 clipnorm=9,
             ),
         )
