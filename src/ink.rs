@@ -195,6 +195,17 @@ impl Ink {
         })
     }
 
+    // pub fn strokes_mut<'a>(&'a mut self) -> impl Iterator<Item = &'a mut [Point3<f32>]> {
+    //     self.stroke_ends
+    //         .iter()
+    //         .scan((0usize, &mut self.points[..]), |s, e| {
+    //             let (before, after) = s.1.split_at_mut(*e - s.0);
+    //             s.1 = after;
+    //             s.0 = *e;
+    //             Some(before)
+    //         })
+    // }
+
     pub fn normalize(&mut self, target_height: f32) {
         let ink_scale = target_height / self.y_range.size();
         // let time_scale = ink_scale * self.ink_len() / self.t_range.size();
@@ -207,25 +218,33 @@ impl Ink {
         }
     }
 
-    pub fn smooth(&mut self) {
-        for i in 1..(self.len() - 1) {
-            // skip if we're either the first or last point in a stroke.
-            // (we only want to move points in the middle of a stroke.)
-            if self.is_pen_up(i) || self.is_pen_up(i - 1) {
-                continue;
+    pub fn smooth(&mut self, half_life: f32) {
+        let span = 3;
+
+        for range in self.stroke_ends.iter().scan(0usize, |s, e| {
+            let range = *s..*e;
+            *s = *e;
+            Some(range)
+        }) {
+            let stroke = &mut self.points[range];
+            for i in 0..stroke.len() {
+                let current_range: usize = i.min(span).min(stroke.len() - 1 - i);
+                let current_z = stroke[i].z;
+
+                let mut x = 0.0f32;
+                let mut y = 0.0f32;
+                let mut total_weight = 0.0f32;
+                // dbg!(i, current_range);
+                for p in &stroke[(i - current_range)..=(i + current_range)] {
+                    let weight = 0.5f32.powf((p.z - current_z).abs() / half_life);
+                    x += p.x * weight;
+                    y += p.y * weight;
+                    total_weight += weight;
+                }
+
+                stroke[i].x = x / total_weight;
+                stroke[i].y = y / total_weight;
             }
-            let x = self.points[(i - 1)..=(i + 1)]
-                .iter()
-                .map(|p| p.x)
-                .sum::<f32>()
-                / 3.0;
-            let y = self.points[(i - 1)..=(i + 1)]
-                .iter()
-                .map(|p| p.y)
-                .sum::<f32>()
-                / 3.0;
-            self.points[i].x = x;
-            self.points[i].y = y;
         }
     }
 
