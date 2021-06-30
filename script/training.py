@@ -479,7 +479,7 @@ class CTCLayer(layers.Layer):
 def build_model(step_size=10):
     MERGE_MODE = 'concat'
     DROPOUT = 0.5
-    RNN_SIZE = 96
+    RNN_SIZE = 64
     RNN_LAYERS = 5
 
     input_inks = layers.Input(name="inks", shape=(None, step_size))
