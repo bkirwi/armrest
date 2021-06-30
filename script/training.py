@@ -202,6 +202,8 @@ def clean_iam_text(line):
             .replace(" .", ".")
             .replace(" !", "!")
             .replace(" ?", "?")
+            .replace(" )", ")")
+            .replace("( ", "(")
             .replace(" :", ":")
             .replace("n ' t", "n't")
             .replace(" ' s ", "'s ")
@@ -522,13 +524,11 @@ def save_prediction_model(model, path, steps=4000):
     model.save(path, save_format="tf", signatures=concrete_func)
 
 def test_keras(data_path, model_path, weights_only=True, checkpoint=None):
+    # There's some training-related state in the checkpoint that doesn't get restored
     if weights_only:
-        model = build_model()
-        model.load_weights(model_path)
+        model = load_model_and_checkpoint(None, model_path)
     else:
-        model = keras.models.load_model(model_path)
-        if checkpoint:
-            model.load_weights(checkpoint)
+        model = load_model_and_checkpoint(model_path, checkpoint)
 
     test_count = 32
 
@@ -654,9 +654,9 @@ def load_model_and_checkpoint(model, checkpoint):
         print("Building model...")
         model = build_model()
 
-    if tf.io.gfile.exists(f"{checkpoint}.index"):
+    if checkpoint and tf.io.gfile.exists(f"{checkpoint}.index"):
         print("Loading existing weights...")
-        model.load_weights(checkpoint)
+        model.load_weights(checkpoint).expect_partial()
 
     return model
 
