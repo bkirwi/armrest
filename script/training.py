@@ -212,6 +212,10 @@ def clean_iam_text(line):
         after = "\"" + after[2:]
     if after.endswith(" \""):
         after = after[:-2] + "\""
+    if after.startswith("' "):
+        after = "'" + after[2:]
+    if after.endswith(" '"):
+        after = after[:-2] + "'"
     if line != after:
         print("Cleaned line:", after)
     return after
