@@ -58,7 +58,7 @@ type ContentHash = u64;
 /// Represents a tree of currently-drawn widgets
 #[derive(Debug, Clone)]
 pub struct Node {
-    children: Vec<(Split, i32, Node)>,
+    children: Vec<(Side, i32, Node)>,
     // TODO: should probably keep a dirty flag here instead of the box!
     content: ContentHash,
 }
@@ -271,13 +271,13 @@ impl<'a, M> Frame<'a, M> {
         }
     }
 
-    pub fn split_off(&mut self, split: Split, offset: i32) -> Frame<M> {
+    pub fn split_off(&mut self, split: Side, offset: i32) -> Frame<M> {
         let size = self.bounds.size();
         let split_value = match split {
-            Split::Left => self.bounds.top_left.x + offset.min(size.x),
-            Split::Right => self.bounds.bottom_right.x - offset.min(size.x),
-            Split::Top => self.bounds.top_left.y + offset.min(size.y),
-            Split::Bottom => self.bounds.bottom_right.y - offset.min(size.y),
+            Side::Left => self.bounds.top_left.x + offset.min(size.x),
+            Side::Right => self.bounds.bottom_right.x - offset.min(size.x),
+            Side::Top => self.bounds.top_left.y + offset.min(size.y),
+            Side::Bottom => self.bounds.bottom_right.y - offset.min(size.y),
         };
 
         let should_truncate = self
@@ -317,7 +317,7 @@ impl<'a, M> Frame<'a, M> {
         self.bounds.size()
     }
 
-    fn space(&mut self, a: Split, b: Split, extra: i32, ratio: f32) {
+    fn space(&mut self, a: Side, b: Side, extra: i32, ratio: f32) {
         if extra > 0 {
             let offset = (extra as f32 * ratio) as i32;
             self.split_off(a, offset);
@@ -327,8 +327,8 @@ impl<'a, M> Frame<'a, M> {
 
     pub fn horizontal_space(&mut self, width: i32, placement: f32) {
         self.space(
-            Split::Left,
-            Split::Right,
+            Side::Left,
+            Side::Right,
             self.remaining().x - width,
             placement,
         );
@@ -336,8 +336,8 @@ impl<'a, M> Frame<'a, M> {
 
     pub fn vertical_space(&mut self, height: i32, placement: f32) {
         self.space(
-            Split::Top,
-            Split::Bottom,
+            Side::Top,
+            Side::Bottom,
             self.remaining().y - height,
             placement,
         );
@@ -358,12 +358,12 @@ impl<'a, M> Frame<'a, M> {
     pub fn render_split(
         &mut self,
         widget: &impl Widget<Message = M>,
-        split: Split,
+        split: Side,
         positioning: f32,
     ) {
         let amount = match split {
-            Split::Left | Split::Right => widget.size().x,
-            Split::Top | Split::Bottom => widget.size().y,
+            Side::Left | Side::Right => widget.size().x,
+            Side::Top | Side::Bottom => widget.size().y,
         };
 
         let widget_area = self.split_off(split, amount);
@@ -644,7 +644,7 @@ impl<T: Widget> Widget for Stack<T> {
     fn render(&self, mut frame: Frame<T::Message>) {
         for widget in &self.widgets {
             let split = widget.size().y;
-            frame.render_split(widget, Split::Top, 0.0);
+            frame.render_split(widget, Side::Top, 0.0);
         }
     }
 }

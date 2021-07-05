@@ -2,20 +2,20 @@ use libremarkable::cgmath::{ElementWise, Point2, Vector2};
 use libremarkable::framebuffer::common::mxcfb_rect;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Split {
+pub enum Side {
     Left,
     Right,
     Top,
     Bottom,
 }
 
-impl Split {
-    pub fn flip(&self) -> Split {
+impl Side {
+    pub fn flip(&self) -> Side {
         match self {
-            Split::Left => Split::Right,
-            Split::Right => Split::Left,
-            Split::Top => Split::Bottom,
-            Split::Bottom => Split::Top,
+            Side::Left => Side::Right,
+            Side::Right => Side::Left,
+            Side::Top => Side::Bottom,
+            Side::Bottom => Side::Top,
         }
     }
 }
@@ -50,9 +50,9 @@ impl BoundingBox {
         }
     }
 
-    pub fn split(&self, split: Split, value: i32) -> Option<BoundingBox> {
+    pub fn split(&self, split: Side, value: i32) -> Option<BoundingBox> {
         match split {
-            Split::Left => {
+            Side::Left => {
                 if value >= self.top_left.x {
                     Some(BoundingBox::new(
                         self.top_left,
@@ -62,7 +62,7 @@ impl BoundingBox {
                     None
                 }
             }
-            Split::Right => {
+            Side::Right => {
                 if value <= self.bottom_right.x {
                     Some(BoundingBox::new(
                         Point2::new(value, self.top_left.y),
@@ -72,7 +72,7 @@ impl BoundingBox {
                     None
                 }
             }
-            Split::Top => {
+            Side::Top => {
                 if value >= self.top_left.y {
                     Some(BoundingBox::new(
                         self.top_left,
@@ -82,7 +82,7 @@ impl BoundingBox {
                     None
                 }
             }
-            Split::Bottom => {
+            Side::Bottom => {
                 if value <= self.bottom_right.y {
                     Some(BoundingBox::new(
                         Point2::new(self.top_left.x, value),
