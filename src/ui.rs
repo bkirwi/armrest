@@ -32,7 +32,7 @@ pub fn full_refresh(fb: &mut Framebuffer) {
 pub fn quick_refresh(fb: &mut Framebuffer, rect: mxcfb_rect) {
     fb.partial_refresh(
         &rect,
-        PartialRefreshMode::Wait,
+        PartialRefreshMode::Async,
         waveform_mode::WAVEFORM_MODE_DU,
         display_temp::TEMP_USE_REMARKABLE_DRAW,
         dither_mode::EPDC_FLAG_USE_DITHERING_ALPHA,
