@@ -6,7 +6,6 @@ use libremarkable::input::wacom::{WacomEvent, WacomPen};
 use libremarkable::input::InputEvent;
 use std::collections::HashMap;
 
-
 use std::mem;
 use std::time::Instant;
 
@@ -146,10 +145,7 @@ impl State {
                         last_point
                             .map(|last| Gesture::Stroke(self.current_tool, last, current_point))
                     }
-                    _ => {
-                        eprintln!("Draw event while pen is not down!");
-                        None
-                    }
+                    _ => None,
                 },
                 WacomEvent::Unknown => None,
             },
@@ -174,7 +170,6 @@ impl State {
                             None
                         }
                     } else {
-                        eprintln!("Weird: releasing a finger that wasn't pressed!");
                         None
                     }
                 }
