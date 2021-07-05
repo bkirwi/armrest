@@ -1,11 +1,14 @@
-data/inks/iam-ondb-trainset.txt: data/iam-ondb script/training.py
-	script/training.py ondb_to_text data/iam-ondb/ $@ --subset trainset
+data/inks/iam-ondb-set-%.txt: data/iam-ondb script/training.py
+	script/training.py ondb_to_text data/iam-ondb/ $@ --subset $*
 
-data/inks/iam-ondb-validset.txt: data/iam-ondb script/training.py
-	script/training.py ondb_to_text data/iam-ondb/ $@ --subset testset_v
+data/inks/iam-ondb-trainset.txt: data/inks/iam-ondb-set-trainset.txt script/training.py
+	script/training.py augment data/inks/iam-ondb-set-trainset.txt $@ --target_size 6000
 
-data/inks/iam-ondb-testset.txt: data/iam-ondb script/training.py
-	script/training.py ondb_to_text data/iam-ondb/ $@ --subset testset_t
+data/inks/iam-ondb-validset.txt: data/inks/iam-ondb-set-testset_v.txt script/training.py
+	script/training.py augment data/inks/iam-ondb-set-testset_v.txt $@ --target_size 2000
+
+data/inks/iam-ondb-testset.txt: data/inks/iam-ondb-set-testset_t.txt script/training.py
+	script/training.py augment data/inks/iam-ondb-set-testset_t.txt $@ --target_size 2000
 
 data/inks/iam-docdb-lines-%.txt: data/iam-docdb-1.0 script/training.py
 	script/training.py docdb_to_text data/iam-docdb-1.0 $@ --subset $*.set
@@ -17,13 +20,13 @@ data/inks/armrest.txt: data/inks/jabberwocky.txt data/inks/prufrock.txt data/ink
 	cat $^ > $@
 
 data/inks/armrest-trainset.txt: data/inks/armrest.txt script/training.py
-	script/training.py augment data/inks/armrest.txt data/inks/armrest-trainset.txt --subset trainset --target_size 3000
+	script/training.py augment data/inks/armrest.txt data/inks/armrest-trainset.txt --subset trainset --target_size 6000
 
 data/inks/armrest-validset.txt: data/inks/armrest.txt script/training.py
-	script/training.py augment data/inks/armrest.txt data/inks/armrest-validset.txt --subset validset --target_size 1000
+	script/training.py augment data/inks/armrest.txt data/inks/armrest-validset.txt --subset validset --target_size 2000
 
 data/inks/armrest-testset.txt: data/inks/armrest.txt script/training.py
-	script/training.py augment data/inks/armrest.txt data/inks/armrest-testset.txt --subset validset --target_size 1000
+	script/training.py augment data/inks/armrest.txt data/inks/armrest-testset.txt --subset validset --target_size 2000
 
 data/inks/trainset.txt: data/inks/iam-docdb-lines-0.txt data/inks/iam-docdb-words-0.txt data/inks/iam-docdb-lines-1.txt data/inks/iam-docdb-words-1.txt data/inks/iam-docdb-lines-2.txt data/inks/iam-docdb-words-2.txt data/inks/iam-ondb-trainset.txt data/inks/armrest-trainset.txt
 	cat $^ > $@
