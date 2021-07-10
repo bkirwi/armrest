@@ -136,17 +136,15 @@ impl<M> Applet<M> {
         unimplemented!()
     }
 
-    fn sender(&self) -> impl Fn(M) {
-        let event = self.message_tx.clone();
-        let wakeup = self.input_tx.clone();
-        move |message| {
-            event.send(message);
-            wakeup.send(InputEvent::Unknown {});
+    fn sender(&self) -> Trigger<M> {
+        Trigger {
+            wakeup: self.input_tx.clone(),
+            event: self.message_tx.clone(),
         }
     }
 
-    pub fn run_widget<W: Widget<Message = M>, E>(
-        self,
+    pub fn run<W: Widget<Message = M>, E>(
+        &mut self,
         mut widget: W,
         on_input: impl Fn(&mut W, Action, M) -> Result<(), E>,
     ) -> E {
