@@ -1,3 +1,4 @@
+pub mod app;
 pub mod geom;
 pub mod gesture;
 pub mod ink;

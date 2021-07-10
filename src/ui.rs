@@ -57,29 +57,28 @@ type ContentHash = u64;
 
 /// Represents a tree of currently-drawn widgets
 #[derive(Debug, Clone)]
-pub struct Node {
-    children: Vec<(Side, i32, Node)>,
-    // TODO: should probably keep a dirty flag here instead of the box!
+pub struct DrawTree {
+    children: Vec<(Side, i32, DrawTree)>,
     content: ContentHash,
 }
 
-impl Default for Node {
-    fn default() -> Node {
-        Node {
+impl Default for DrawTree {
+    fn default() -> DrawTree {
+        DrawTree {
             children: vec![],
             content: ContentHash::MAX,
         }
     }
 }
 
-impl Node {
+impl DrawTree {
     pub fn damage(&mut self, mut damaged: BoundingBox) {
-        for (split, value, child) in &mut self.children {
-            if let Some(area) = damaged.split(*split, *value) {
+        for (side, value, child) in &mut self.children {
+            if let Some(area) = damaged.split(*side, *value) {
                 child.damage(area);
             }
 
-            if let Some(area) = damaged.split(split.flip(), *value) {
+            if let Some(area) = damaged.split(side.opposite(), *value) {
                 damaged = area;
             } else {
                 return;
@@ -100,14 +99,14 @@ impl<M> Handlers<M> {
         Handlers { handlers: vec![] }
     }
 
-    pub fn query(&self, point: Point2<i32>) -> impl Iterator<Item = (BoundingBox, &M)> {
+    pub fn query(self, point: Point2<i32>) -> impl Iterator<Item = (BoundingBox, M)> {
         // Handlers get added "outside in" - so to get the nice "bubbling" callback order
         // we iterate in reverse.
         self.handlers
-            .iter()
+            .into_iter()
             .rev()
             .filter(move |(b, _)| b.contains(point))
-            .map(|(b, m)| (*b, m))
+            .map(|(b, m)| (b, m))
     }
 }
 
@@ -115,7 +114,7 @@ pub struct Screen {
     fb: Framebuffer<'static>,
     size: Vector2<i32>,
     dirty: Option<BoundingBox>,
-    node: Node,
+    node: DrawTree,
 }
 
 impl Screen {
@@ -135,7 +134,7 @@ impl Screen {
     pub fn clear(&mut self) {
         self.fb.clear();
         self.dirty = None;
-        self.node = Node::default();
+        self.node = DrawTree::default();
         full_refresh(&mut self.fb);
     }
 
@@ -150,12 +149,8 @@ impl Screen {
 
     pub fn draw<W: Widget>(&mut self, widget: &W) -> Handlers<W::Message> {
         let mut messages = vec![];
-        widget.render(Frame::root(
-            &mut self.fb,
-            &mut self.node,
-            &mut self.dirty,
-            &mut messages,
-        ));
+        let frame = Frame::root(&mut self.fb, &mut self.node, &mut self.dirty, &mut messages);
+        frame.render_placed(widget, 0.5, 0.5);
         if let Some(bounds) = self.dirty.take() {
             partial_refresh(&mut self.fb, bounds.rect());
         }
@@ -165,7 +160,15 @@ impl Screen {
 
 pub struct Canvas<'a, T>(Frame<'a, T>);
 
-impl<T> Canvas<'_, T> {
+impl<'a, T> Canvas<'a, T> {
+    pub fn framebuffer(&mut self) -> &mut Framebuffer<'static> {
+        self.0.fb
+    }
+
+    pub fn bounds(&self) -> BoundingBox {
+        self.0.bounds
+    }
+
     fn ink(&mut self, ink: &Ink) {
         let offset = self.0.bounds.top_left - Point2::origin();
         for stroke in ink.strokes() {
@@ -199,7 +202,7 @@ pub struct Frame<'a, M> {
     fb: &'a mut Framebuffer<'static>,
     dirty: &'a mut Option<BoundingBox>,
     bounds: BoundingBox,
-    node: &'a mut Node,
+    node: &'a mut DrawTree,
     messages: &'a mut Vec<(BoundingBox, M)>,
     index: usize,
     content: ContentHash,
@@ -214,7 +217,7 @@ impl<M> Drop for Frame<'_, M> {
 impl<'a, M> Frame<'a, M> {
     pub fn root(
         fb: &'a mut Framebuffer<'static>,
-        node: &'a mut Node,
+        node: &'a mut DrawTree,
         dirty: &'a mut Option<BoundingBox>,
         messages: &'a mut Vec<(BoundingBox, M)>,
     ) -> Frame<'a, M> {
@@ -290,14 +293,17 @@ impl<'a, M> Frame<'a, M> {
             self.truncate();
             self.node
                 .children
-                .push((split, split_value, Node::default()));
+                .push((split, split_value, DrawTree::default()));
         }
 
         let (_, _, split_node) = &mut self.node.children[self.index];
 
         // TODO: would be better to support an empty frame than this!
-        let split_bounds = self.bounds.split(split, split_value).unwrap();
-        let remaining_bounds = self.bounds.split(split.flip(), split_value).unwrap();
+        let split_bounds = self
+            .bounds
+            .split(split, split_value)
+            .expect(&format!("Unable to split: {:?}/{}", split, offset));
+        let remaining_bounds = self.bounds.split(split.opposite(), split_value).unwrap();
         self.bounds = remaining_bounds;
 
         self.index += 1;

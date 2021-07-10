@@ -9,6 +9,7 @@ use crate::math;
 use flo_curves::bezier::Curve;
 use flo_curves::{Coordinate, Coordinate3D};
 use libremarkable::cgmath::{Angle, ElementWise, EuclideanSpace, InnerSpace, Point3, Vector3};
+use std::thread;
 use std::time::Instant;
 use tflite::ops::builtin::BuiltinOpResolver;
 use tflite::{FlatBufferModel, Interpreter, InterpreterBuilder};

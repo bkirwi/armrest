@@ -1,11 +1,12 @@
 use crate::ink::Ink;
-use libremarkable::cgmath::{EuclideanSpace, MetricSpace, Point2, Vector2};
+use libremarkable::cgmath::{Deg, EuclideanSpace, InnerSpace, MetricSpace, Point2, Vector2};
 
 use libremarkable::input::multitouch::MultitouchEvent;
 use libremarkable::input::wacom::{WacomEvent, WacomPen};
 use libremarkable::input::InputEvent;
 use std::collections::HashMap;
 
+use crate::geom::Side;
 use std::mem;
 use std::time::Instant;
 
@@ -56,6 +57,22 @@ impl Touch {
         Touch {
             start: self.start + by,
             end: self.end + by,
+        }
+    }
+
+    pub fn to_swipe(&self) -> Option<Side> {
+        if self.length() < 100.0 {
+            return None;
+        }
+
+        let vec: Vector2<f32> = self.end - self.start;
+
+        if vec.x.abs() > 4.0 * vec.y.abs() {
+            Some(if vec.x > 0.0 { Side::Right } else { Side::Left })
+        } else if vec.y.abs() > 4.0 * vec.x.abs() {
+            Some(if vec.x > 0.0 { Side::Bottom } else { Side::Top })
+        } else {
+            None
         }
     }
 }

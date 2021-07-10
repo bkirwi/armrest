@@ -10,7 +10,7 @@ pub enum Side {
 }
 
 impl Side {
-    pub fn flip(&self) -> Side {
+    pub fn opposite(&self) -> Side {
         match self {
             Side::Left => Side::Right,
             Side::Right => Side::Left,
