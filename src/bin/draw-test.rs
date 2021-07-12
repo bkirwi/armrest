@@ -25,7 +25,9 @@ fn main() {
         stack.push(line.on_touch(Some(i)));
     }
 
-    app::run_widget(stack, |stack, _action, message| {
+    let mut app = app::App::new();
+
+    app.run(stack, |stack, _action, message| {
         let next = ui::Text::layout(&font, &format!("Touched line {:?}", message), 44);
         stack.push(next.on_touch(Some(message)));
         Ok(())
