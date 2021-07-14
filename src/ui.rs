@@ -490,7 +490,13 @@ impl<'a, M> Text<'a, M> {
         }
     }
 
-    pub fn wrap(font: &Font<'a>, text: &str, max_width: i32, size: i32) -> Vec<Text<'a, M>> {
+    pub fn wrap(
+        font: &Font<'a>,
+        text: &str,
+        max_width: i32,
+        size: i32,
+        justify: bool,
+    ) -> Vec<Text<'a, M>> {
         let scale = Scale {
             x: size as f32,
             y: size as f32,
@@ -518,7 +524,7 @@ impl<'a, M> Text<'a, M> {
             let _max_y = 0;
 
             let text_width: usize = line.iter().map(|x| x.width()).sum();
-            let justified_space_width = if i == lines.len() - 1 || line.len() <= 1 {
+            let justified_space_width = if !justify || i == lines.len() - 1 || line.len() <= 1 {
                 space_width
             } else {
                 (max_width - text_width as i32) as f32 / (line.len() - 1) as f32
