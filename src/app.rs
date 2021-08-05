@@ -22,12 +22,6 @@ impl<M> Sender<M> {
     }
 }
 
-// struct HWR {}
-//
-// impl HWR {
-//     fn recognize(&mut self);
-// }
-
 pub struct App<M> {
     input_tx: mpsc::Sender<InputEvent>,
     input_rx: mpsc::Receiver<InputEvent>,
