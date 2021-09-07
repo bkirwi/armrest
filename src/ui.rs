@@ -524,10 +524,16 @@ impl<'a, M> Text<'a, M> {
             let _max_y = 0;
 
             let text_width: usize = line.iter().map(|x| x.width()).sum();
-            let justified_space_width = if !justify || i == lines.len() - 1 || line.len() <= 1 {
+            let justified_space_width = if !justify || line.len() <= 1 {
                 space_width
             } else {
-                (max_width - text_width as i32) as f32 / (line.len() - 1) as f32
+                let best_width = (max_width - text_width as i32) as f32 / (line.len() - 1) as f32;
+                if i == lines.len() - 1 {
+                    // the last line in a paragraph should never be stretched, but may need to be compressed slightly!
+                    best_width.min(space_width)
+                } else {
+                    best_width
+                }
             };
 
             let mut hasher = DefaultHasher::new();
