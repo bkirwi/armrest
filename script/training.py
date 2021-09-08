@@ -38,7 +38,7 @@ def load_tensors(test_file):
     result = []
     for line in lines:
         text_and_points = line.split("\t")
-        assert len(text_and_points) == 2
+        assert len(text_and_points) == 2, line
         text = text_and_points[0]
         if ";" in text_and_points[1]:
             (big_sep, small_sep) = (";", ",")
@@ -64,7 +64,7 @@ def load_inks(filename):
     result = []
     for line in lines:
         text_and_points = line.split("\t")
-        assert len(text_and_points) == 2
+        assert len(text_and_points) == 2, line
         text = text_and_points[0]
         strokes = [
             np.array([
@@ -283,15 +283,15 @@ def normalize(pairs):
     return results
 
 
-def load_docdb(data_dir, name, split_words=False):
+def load_docdb(data_dir, name, data_type):
     with open(os.path.join(data_dir, name)) as f:
         files = [t.strip() for t in f.readlines()]
 
     results = []
     for file in files:
         # 856a is specified in set 4 but doesn't seem to exist
-        # 024 has vertical text in a way we don't care to support
-        if file in ['856a.inkml', '024.inkml']:
+        # 024 and 227 have vertical text in a way we don't care to support
+        if file in ['856a.inkml', '024.inkml', '227.inkml']:
             continue
         tree = ElementTree.parse(os.path.join(data_dir, file))
 
@@ -350,12 +350,13 @@ def load_docdb(data_dir, name, split_words=False):
                     results.append(view)
             return results
 
-        if split_words:
-            node_type = 'Word'
-        else:
-            node_type = 'Textline'
+        wrapper_type, node_type = {
+            'lines': ('Textblock', 'Textline'),
+            'words': ('Textblock', 'Word'),
+            'table': ('Table', 'Textline'),
+        }[data_type]
 
-        for textblock in nodes_of_type(tree, 'Textblock'):
+        for textblock in nodes_of_type(tree, wrapper_type):
             for textline in nodes_of_type(textblock, node_type):
                 transcription = textline[1].text
 
@@ -677,14 +678,14 @@ if __name__ == '__main__':
     subcommand.add_argument("--subset", type=str, default="trainset")
     subcommand.set_defaults(func=ondb_to_text)
 
-    def docdb_to_text(docdb_path, text_path, subset, split_words):
-        save_inks(filter_valid(load_docdb(docdb_path, subset, split_words)), text_path)
+    def docdb_to_text(docdb_path, text_path, subset, data_type):
+        save_inks(filter_valid(load_docdb(docdb_path, subset, data_type)), text_path)
 
     subcommand = subparsers.add_parser("docdb_to_text")
     subcommand.add_argument("docdb_path", type=str)
     subcommand.add_argument("text_path", type=str)
     subcommand.add_argument("--subset", type=str, default="0.txt")
-    subcommand.add_argument("--split_words", default=False, action='store_true')
+    subcommand.add_argument("--data_type", type=str, default='lines')
     subcommand.set_defaults(func=docdb_to_text)
 
     def augment_text(from_path, to_path, subset, target_size):
