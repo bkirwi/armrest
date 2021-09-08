@@ -14,7 +14,7 @@ use std::time::Instant;
 use tflite::ops::builtin::BuiltinOpResolver;
 use tflite::{FlatBufferModel, Interpreter, InterpreterBuilder};
 
-const MODEL: &[u8; 1793632] = include_bytes!("english_ascii.tflite");
+const MODEL: &[u8] = include_bytes!("english_ascii.tflite");
 
 const CHARS: &str = " 0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~";
 
