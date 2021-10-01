@@ -100,6 +100,10 @@ impl<M> Handlers<M> {
         Handlers { handlers: vec![] }
     }
 
+    pub fn push(&mut self, frame: &Frame, message: M) {
+        self.handlers.push((frame.bounds, message));
+    }
+
     pub fn query(self, point: Point2<i32>) -> impl Iterator<Item = (BoundingBox, M)> {
         // Handlers get added "outside in" - so to get the nice "bubbling" callback order
         // we iterate in reverse.
@@ -149,19 +153,19 @@ impl Screen {
     }
 
     pub fn draw<W: Widget>(&mut self, widget: &W) -> Handlers<W::Message> {
-        let mut messages = vec![];
-        let frame = Frame::root(&mut self.fb, &mut self.node, &mut self.dirty, &mut messages);
-        frame.render_placed(widget, 0.5, 0.5);
+        let mut handlers = Handlers::new();
+        let frame = Frame::root(&mut self.fb, &mut self.node, &mut self.dirty);
+        widget.render_placed(&mut handlers, frame, 0.5, 0.5);
         if let Some(bounds) = self.dirty.take() {
             partial_refresh(&mut self.fb, bounds.rect());
         }
-        Handlers { handlers: messages }
+        handlers
     }
 }
 
-pub struct Canvas<'a, T>(Frame<'a, T>);
+pub struct Canvas<'a>(Frame<'a>);
 
-impl<'a, T> Canvas<'a, T> {
+impl<'a> Canvas<'a> {
     pub fn framebuffer(&mut self) -> &mut Framebuffer<'static> {
         self.0.fb
     }
@@ -199,29 +203,27 @@ impl<'a, T> Canvas<'a, T> {
     }
 }
 
-pub struct Frame<'a, M> {
+pub struct Frame<'a> {
     fb: &'a mut Framebuffer<'static>,
     dirty: &'a mut Option<BoundingBox>,
     bounds: BoundingBox,
     node: &'a mut DrawTree,
-    messages: &'a mut Vec<(BoundingBox, M)>,
     index: usize,
     content: ContentHash,
 }
 
-impl<M> Drop for Frame<'_, M> {
+impl Drop for Frame<'_> {
     fn drop(&mut self) {
         self.truncate();
     }
 }
 
-impl<'a, M> Frame<'a, M> {
+impl<'a> Frame<'a> {
     pub fn root(
         fb: &'a mut Framebuffer<'static>,
         node: &'a mut DrawTree,
         dirty: &'a mut Option<BoundingBox>,
-        messages: &'a mut Vec<(BoundingBox, M)>,
-    ) -> Frame<'a, M> {
+    ) -> Frame<'a> {
         Frame {
             fb,
             dirty,
@@ -230,7 +232,6 @@ impl<'a, M> Frame<'a, M> {
                 Point2::new(DISPLAYWIDTH as i32, DISPLAYHEIGHT as i32),
             ),
             node,
-            messages,
             index: 0,
             content: 0,
         }
@@ -259,11 +260,7 @@ impl<'a, M> Frame<'a, M> {
         }
     }
 
-    pub fn on_input(&mut self, message: M) {
-        self.messages.push((self.bounds, message))
-    }
-
-    pub fn canvas(mut self, hash: ContentHash) -> Option<Canvas<'a, M>> {
+    pub fn canvas(mut self, hash: ContentHash) -> Option<Canvas<'a>> {
         if hash == self.node.content {
             self.content = hash;
             None
@@ -275,7 +272,7 @@ impl<'a, M> Frame<'a, M> {
         }
     }
 
-    pub fn split_off(&mut self, split: Side, offset: i32) -> Frame<M> {
+    pub fn split_off(&mut self, split: Side, offset: i32) -> Frame {
         let size = self.bounds.size();
         let split_value = match split {
             Side::Left => self.bounds.top_left.x + offset.min(size.x),
@@ -314,7 +311,6 @@ impl<'a, M> Frame<'a, M> {
             dirty: self.dirty,
             bounds: split_bounds,
             node: split_node,
-            messages: self.messages,
             index: 0,
             content: 0,
         }
@@ -348,33 +344,6 @@ impl<'a, M> Frame<'a, M> {
             self.remaining().y - height,
             placement,
         );
-    }
-
-    pub fn render_placed(
-        mut self,
-        widget: &impl Widget<Message = M>,
-        horizontal_placement: f32,
-        vertical_placement: f32,
-    ) {
-        let size = widget.size();
-        self.vertical_space(size.y, vertical_placement);
-        self.horizontal_space(size.x, horizontal_placement);
-        widget.render(self)
-    }
-
-    pub fn render_split(
-        &mut self,
-        widget: &impl Widget<Message = M>,
-        split: Side,
-        positioning: f32,
-    ) {
-        let amount = match split {
-            Side::Left | Side::Right => widget.size().x,
-            Side::Top | Side::Bottom => widget.size().y,
-        };
-
-        let widget_area = self.split_off(split, amount);
-        widget_area.render_placed(widget, positioning, positioning);
     }
 }
 
@@ -411,7 +380,36 @@ impl Action {
 pub trait Widget {
     type Message;
     fn size(&self) -> Vector2<i32>;
-    fn render(&self, sink: Frame<Self::Message>);
+    fn render(&self, handlers: &mut Handlers<Self::Message>, frame: Frame);
+
+    fn render_placed(
+        &self,
+        handlers: &mut Handlers<Self::Message>,
+        mut frame: Frame,
+        horizontal_placement: f32,
+        vertical_placement: f32,
+    ) {
+        let size = self.size();
+        frame.vertical_space(size.y, vertical_placement);
+        frame.horizontal_space(size.x, horizontal_placement);
+        self.render(handlers, frame)
+    }
+
+    fn render_split(
+        &self,
+        handlers: &mut Handlers<Self::Message>,
+        frame: &mut Frame,
+        split: Side,
+        positioning: f32,
+    ) {
+        let amount = match split {
+            Side::Left | Side::Right => self.size().x,
+            Side::Top | Side::Bottom => self.size().y,
+        };
+
+        let widget_area = frame.split_off(split, amount);
+        self.render_placed(handlers, widget_area, positioning, positioning);
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -585,9 +583,9 @@ impl<M: Clone> Widget for Text<'_, M> {
         self.bounds
     }
 
-    fn render(&self, mut sink: Frame<M>) {
+    fn render(&self, handlers: &mut Handlers<Self::Message>, mut sink: Frame) {
         if let Some(m) = self.on_touch.clone() {
-            sink.on_input(m)
+            handlers.push(&sink, m);
         }
 
         if let Some(mut canvas) = sink.canvas(self.content_hash) {
@@ -659,10 +657,9 @@ impl<T: Widget> Widget for Stack<T> {
         self.bounds
     }
 
-    fn render(&self, mut frame: Frame<T::Message>) {
+    fn render(&self, handlers: &mut Handlers<Self::Message>, mut frame: Frame) {
         for widget in &self.widgets {
-            let split = widget.size().y;
-            frame.render_split(widget, Side::Top, 0.0);
+            widget.render_split(handlers, &mut frame, Side::Top, 0.0);
         }
     }
 }
@@ -714,9 +711,9 @@ impl<M: Clone> Widget for InputArea<M> {
         self.size
     }
 
-    fn render(&self, mut sink: Frame<M>) {
+    fn render(&self, handlers: &mut Handlers<Self::Message>, mut sink: Frame) {
         if let Some(m) = self.on_ink.clone() {
-            sink.on_input(m);
+            handlers.push(&sink, m);
         }
 
         let mut hasher = DefaultHasher::new();
@@ -833,11 +830,11 @@ where
         self.pages[self.current_page].size()
     }
 
-    fn render(&self, mut sink: Frame<T::Message>) {
+    fn render(&self, handlers: &mut Handlers<Self::Message>, mut sink: Frame) {
         if let Some(m) = self.on_touch.clone() {
-            sink.on_input(m)
+            handlers.push(&sink, m);
         }
-        self.pages[self.current_page].render(sink)
+        self.pages[self.current_page].render(handlers, sink)
     }
 }
 
@@ -953,7 +950,7 @@ impl<M> Widget for ActualText<M> {
         self.size
     }
 
-    fn render(&self, sink: Frame<Self::Message>) {
+    fn render(&self, handlers: &mut Handlers<Self::Message>, sink: Frame) {
         if let Some(mut canvas) = sink.canvas(self.hash) {
             for glyph in &self.glyphs {
                 // Draw the glyph into the image per-pixel by using the draw closure
