@@ -13,9 +13,10 @@ use libremarkable::framebuffer::{FramebufferDraw, FramebufferIO, FramebufferRefr
 use rusttype::{point, Font, PositionedGlyph, Scale};
 
 use std::collections::hash_map::DefaultHasher;
-use std::fmt::Debug;
+use std::fmt::{Debug, Formatter, Pointer};
 use std::hash::{Hash, Hasher};
 
+use std::any::Any;
 use std::ops::{Deref, DerefMut};
 use textwrap::core::Fragment;
 
@@ -578,7 +579,6 @@ impl<'a, M> Text<'a, M> {
 }
 
 impl<M: Clone> Widget for Text<'_, M> {
-    // TODO: should be ! but that's unstable
     type Message = M;
 
     fn size(&self) -> Vector2<i32> {
@@ -838,5 +838,281 @@ where
             sink.on_input(m)
         }
         self.pages[self.current_page].render(sink)
+    }
+}
+
+#[derive(Debug, Clone)]
+enum WordEnd {
+    // any future input...
+    Sticky, // should be treated as part of the current word
+    Space(f32), // should be a new word
+            // TODO: third case for hyphenated words
+}
+
+#[derive(Clone)]
+struct Span {
+    glyphs: Vec<PositionedGlyph<'static>>,
+    word_end: WordEnd,
+    width: f32,
+    hash: u64,
+}
+
+impl Span {
+    fn layout(font: &Font<'static>, text: &str, size: f32, origin: Point2<f32>) -> Span {
+        let scale = Scale::uniform(size);
+        let glyphs: Vec<_> = font
+            .layout(text, scale, point(origin.x, origin.y))
+            .collect();
+
+        let width = match glyphs.last() {
+            None => 0f32,
+            Some(last) => last.position().x + last.unpositioned().h_metrics().advance_width,
+        };
+
+        let mut hasher = DefaultHasher::new();
+
+        if let Some((full_name, _, _)) = font.font_name_strings().find(|(_, _, id)| *id == 6) {
+            full_name.hash(&mut hasher);
+        }
+        text.hash(&mut hasher);
+        let hash = hasher.finish();
+
+        Span {
+            glyphs,
+            word_end: WordEnd::Sticky,
+            width,
+            hash,
+        }
+    }
+}
+
+impl Debug for Span {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        "Word".fmt(f)
+    }
+}
+
+impl Fragment for Span {
+    fn width(&self) -> usize {
+        self.width as usize
+    }
+
+    fn whitespace_width(&self) -> usize {
+        match self.word_end {
+            WordEnd::Sticky => 0,
+            WordEnd::Space(size) => size as usize,
+        }
+    }
+
+    fn penalty_width(&self) -> usize {
+        0
+    }
+}
+
+pub struct TextBuilder<M> {
+    height: i32,
+    baseline: f32,
+    words: Vec<Span>,
+    on_input: Option<M>,
+}
+
+pub struct ActualText<M> {
+    size: Vector2<i32>,
+    glyphs: Vec<PositionedGlyph<'static>>,
+    hash: u64,
+    on_input: Option<M>,
+}
+
+impl<M> ActualText<M> {
+    pub fn line(size: i32, font: &Font<'static>, text: &str) -> ActualText<M> {
+        let mut builder = TextBuilder::from_font(size, font);
+        builder.push_words(font, size as f32, text);
+        builder.into_text()
+    }
+
+    pub fn wrap(
+        size: i32,
+        font: &Font<'static>,
+        text: &str,
+        max_width: i32,
+        justify: bool,
+    ) -> Vec<ActualText<M>>
+    where
+        M: Clone,
+    {
+        let mut builder = TextBuilder::from_font(size, font);
+        builder.push_words(font, size as f32, text);
+        builder.wrap(max_width, justify)
+    }
+}
+
+impl<M> Widget for ActualText<M> {
+    type Message = M;
+
+    fn size(&self) -> Vector2<i32> {
+        self.size
+    }
+
+    fn render(&self, sink: Frame<Self::Message>) {
+        if let Some(mut canvas) = sink.canvas(self.hash) {
+            for glyph in &self.glyphs {
+                // Draw the glyph into the image per-pixel by using the draw closure
+                if let Some(bounding_box) = glyph.pixel_bounding_box() {
+                    glyph.draw(|x, y, v| {
+                        let mult = v * 255.0;
+                        canvas.write(
+                            bounding_box.min.x + x as i32,
+                            bounding_box.min.y + y as i32,
+                            mult as u8,
+                        );
+                    });
+                }
+            }
+        }
+    }
+}
+
+impl<M> TextBuilder<M> {
+    pub fn new(height: i32, baseline: f32) -> TextBuilder<M> {
+        TextBuilder {
+            height,
+            baseline,
+            words: vec![],
+            on_input: None,
+        }
+    }
+
+    /// Create a new builder based on a specific font.
+    /// This chooses the text baseline based on the ascender height in the font given.
+    pub fn from_font(height: i32, font: &Font) -> TextBuilder<M> {
+        TextBuilder::new(height, font.v_metrics(Scale::uniform(height as f32)).ascent)
+    }
+
+    pub fn into_text(self) -> ActualText<M> {
+        TextBuilder::build_from_parts(self.height, self.words.into_iter())
+    }
+
+    fn build_from_parts(height: i32, mut words: impl Iterator<Item = Span>) -> ActualText<M> {
+        // Iterate over the words, collecting all the glyphs and adjusting them
+        // to their final position.
+        let mut word_start = 0.0;
+        let mut last_space = 0.0;
+        let mut glyphs = vec![];
+
+        let mut hasher = DefaultHasher::new();
+        for mut word in words {
+            word_start += last_space;
+            for mut glyph in word.glyphs {
+                let mut pos = glyph.position();
+                pos.x += word_start;
+                glyph.set_position(pos);
+
+                glyph.id().hash(&mut hasher);
+                (pos.x as usize).hash(&mut hasher);
+                (pos.y as usize).hash(&mut hasher);
+
+                glyphs.push(glyph);
+            }
+
+            word_start += word.width;
+            last_space = match word.word_end {
+                WordEnd::Sticky => 0.0,
+                WordEnd::Space(space) => space,
+            };
+        }
+
+        ActualText {
+            size: Vector2::new(word_start.ceil() as i32, height),
+            glyphs,
+            hash: hasher.finish(),
+            on_input: None,
+        }
+    }
+
+    /// Split the given string into words, and append each of them to the current Text.
+    pub fn push_words(&mut self, font: &Font<'static>, scale: f32, text: &str) {
+        let space_width = font
+            .glyph(' ')
+            .scaled(Scale::uniform(scale))
+            .h_metrics()
+            .advance_width;
+
+        let mut iter = text.split_ascii_whitespace().map(|w| {
+            let mut word = Span::layout(font, w, scale, Point2::new(0.0, self.baseline));
+            word.word_end = WordEnd::Space(space_width);
+            word
+        });
+
+        for w in text.split_ascii_whitespace() {
+            let mut word = Span::layout(font, w, scale, Point2::new(0.0, self.baseline));
+            word.word_end = WordEnd::Space(space_width);
+            self.words.push(word);
+        }
+    }
+
+    /// Consume the given text, and return a vector of Texts split optimally into lines.
+    pub fn wrap(self, length: i32, justify: bool) -> Vec<ActualText<M>>
+    where
+        M: Clone,
+    {
+        let lines: Vec<&[Span]> =
+            textwrap::core::wrap_optimal_fit(&self.words, |_| length as usize);
+
+        let mut result: Vec<TextBuilder<M>> = lines
+            .into_iter()
+            .map(|line| TextBuilder {
+                height: self.height,
+                baseline: self.baseline,
+                words: line.to_vec(),
+                on_input: None,
+            })
+            .collect();
+
+        if justify {
+            let last_line = result.len() - 1;
+            for (i, line) in result.iter_mut().enumerate() {
+                let min_length = if i == last_line { 0 } else { length };
+                line.set_length(min_length, length);
+            }
+        }
+
+        result.into_iter().map(|b| b.into_text()).collect()
+    }
+
+    /// Adjust the line length by resizing the spaces between words.
+    /// This is likely to look quite ugly for large adjustments... be judicious.
+    fn set_length(&mut self, min: i32, max: i32)
+    where
+        M: Clone,
+    {
+        let mut word_width = 0.0;
+        let mut space_width = 0.0;
+        for (i, word) in self.words.iter().enumerate() {
+            word_width += word.width;
+            if i != self.words.len() - 1 {
+                space_width += match word.word_end {
+                    WordEnd::Sticky => 0.0,
+                    WordEnd::Space(f) => f,
+                };
+            }
+        }
+
+        let total_length = word_width + space_width;
+        let target_length = if total_length < min as f32 {
+            min
+        } else if total_length > max as f32 {
+            max
+        } else {
+            return; // we're already a legal length!
+        };
+
+        let new_space_width = (target_length as f32 - word_width).max(0.0);
+        let ratio = new_space_width / space_width;
+
+        for word in &mut self.words {
+            if let WordEnd::Space(size) = &mut word.word_end {
+                *size *= ratio;
+            }
+        }
     }
 }
