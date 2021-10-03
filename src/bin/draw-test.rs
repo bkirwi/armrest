@@ -42,9 +42,9 @@ fn main() {
     let big_string =
         "and but that blow would be the be-all and the end-all here, then here, ".repeat(10);
 
-    let mut text: TextBuilder<()> = ui::TextBuilder::from_font(44, &font);
-    text.push_words(&font, 44.0, &big_string);
-    text.push_words(&font2, 44.0, &big_string);
+    let mut text = ui::TextBuilder::from_font(44, &font);
+    text.push_words(&font, 44.0, &big_string, None);
+    text.push_words(&font2, 44.0, &big_string, Some("ok"));
     let lines = text.wrap(1000, true);
 
     dbg!(lines.len(), lines[0].size());
