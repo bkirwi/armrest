@@ -3,23 +3,14 @@ pub use crate::geom::*;
 use crate::gesture::Touch;
 use crate::ink::Ink;
 use libremarkable::cgmath::{EuclideanSpace, Point2, Vector2};
-use libremarkable::framebuffer::common::{
-    color, display_temp, dither_mode, mxcfb_rect, waveform_mode, DISPLAYHEIGHT, DISPLAYWIDTH,
-    DRAWING_QUANT_BIT,
-};
-use libremarkable::framebuffer::core::Framebuffer;
-use libremarkable::framebuffer::refresh::PartialRefreshMode;
-use libremarkable::framebuffer::{FramebufferDraw, FramebufferIO, FramebufferRefresh};
-use rusttype::{point, Font, PositionedGlyph, Scale};
+
+use libremarkable::framebuffer::FramebufferDraw;
 
 use std::collections::hash_map::DefaultHasher;
-use std::fmt::{Debug, Formatter, Pointer};
+use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 
-use itertools::{Itertools, Position};
-use std::any::Any;
-use std::ops::{Deref, DerefMut, Range, RangeInclusive};
-use textwrap::core::Fragment;
+use std::ops::{Deref, DerefMut};
 
 use crate::ui::Frame;
 
@@ -225,7 +216,7 @@ impl<M: Clone> Widget for InputArea<M> {
         self.size
     }
 
-    fn render(&self, handlers: &mut Handlers<Self::Message>, mut sink: Frame) {
+    fn render(&self, handlers: &mut Handlers<Self::Message>, sink: Frame) {
         if let Some(m) = self.on_ink.clone() {
             handlers.push(&sink, m);
         }
@@ -344,7 +335,7 @@ where
         self.pages[self.current_page].size()
     }
 
-    fn render(&self, handlers: &mut Handlers<Self::Message>, mut sink: Frame) {
+    fn render(&self, handlers: &mut Handlers<Self::Message>, sink: Frame) {
         if let Some(m) = self.on_touch.clone() {
             handlers.push(&sink, m);
         }

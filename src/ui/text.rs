@@ -173,7 +173,7 @@ impl<M> TextBuilder<M> {
         let mut word_ranges: Vec<Range<i32>> = vec![];
 
         let mut hasher = DefaultHasher::new();
-        for (i, mut word) in self.words.into_iter().enumerate() {
+        for (_i, word) in self.words.into_iter().enumerate() {
             word_start += last_space;
 
             for mut glyph in word.glyphs {
@@ -228,7 +228,7 @@ impl<M> TextBuilder<M> {
             width,
         }) = self.words.last_mut()
         {
-            let mut word = Span::layout(font, text, scale, Point2::new(*width, self.baseline));
+            let word = Span::layout(font, text, scale, Point2::new(*width, self.baseline));
             glyphs.extend(word.glyphs);
             *width += word.width;
         } else {

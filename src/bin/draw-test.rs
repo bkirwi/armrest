@@ -5,7 +5,7 @@ use rusttype::Font;
 
 use armrest::app;
 use armrest::ui;
-use armrest::ui::{TextBuilder, Widget};
+use armrest::ui::Widget;
 
 fn main() {
     let font: Font<'static> = {
@@ -51,13 +51,13 @@ fn main() {
 
     let mut stack = ui::Stack::new(Vector2::new(1000, 1800));
 
-    for (i, line) in lines.into_iter().enumerate() {
+    for (_i, line) in lines.into_iter().enumerate() {
         stack.push(line);
     }
 
     let mut app = app::App::new();
 
-    app.run(stack, |stack, _action, message| {
+    app.run(stack, |_stack, _action, message| {
         eprintln!("Touched: {:?}", message);
         Ok(())
     })

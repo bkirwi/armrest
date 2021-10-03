@@ -8,7 +8,6 @@ use libremarkable::framebuffer::FramebufferBase;
 use libremarkable::input::ev::EvDevContext;
 use libremarkable::input::{InputDevice, InputEvent};
 use std::sync::mpsc;
-use std::sync::mpsc::channel;
 
 pub struct Sender<M> {
     wakeup: mpsc::Sender<InputEvent>,

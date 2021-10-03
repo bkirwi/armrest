@@ -31,7 +31,10 @@ fn main() {
                 Spline::WIDTH,
             )
         };
-        assert!(steps * size <= MAX_INK, "Error... longest ink was longer than expected!");
+        assert!(
+            steps * size <= MAX_INK,
+            "Error... longest ink was longer than expected!"
+        );
         let tensor = buffer
             .chunks_exact(size)
             .take(steps)

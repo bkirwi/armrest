@@ -13,9 +13,6 @@ use libremarkable::cgmath::Point2;
 use libremarkable::framebuffer::refresh::PartialRefreshMode;
 use libremarkable::framebuffer::{FramebufferBase, FramebufferDraw};
 
-
-
-
 use armrest::{gesture, ml};
 use libremarkable::framebuffer::core::Framebuffer;
 use std::time::Instant;

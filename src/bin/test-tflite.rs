@@ -1,8 +1,8 @@
 use armrest::ml;
-use armrest::ml::{Recognizer, Spline, LanguageModel};
+use armrest::ml::{LanguageModel, Recognizer, Spline};
+use std::collections::BTreeSet;
 use std::io;
 use std::io::prelude::*;
-use std::collections::BTreeSet;
 
 #[derive(Debug, Clone)]
 struct Dict(BTreeSet<String>);
@@ -19,7 +19,10 @@ impl Dict {
     const INVALID: f32 = 0.001;
 
     fn contains_prefix(&self, prefix: &String) -> bool {
-        self.0.range::<String, _>(prefix..).next().map_or(false, |c| c.starts_with(prefix))
+        self.0
+            .range::<String, _>(prefix..)
+            .next()
+            .map_or(false, |c| c.starts_with(prefix))
     }
 }
 
@@ -32,8 +35,10 @@ impl LanguageModel for &Dict {
             return Dict::INVALID;
         }
 
-        let word_start =
-            input.rfind(|c| " .,".contains(c)).map(|i| i + 1).unwrap_or(0);
+        let word_start = input
+            .rfind(|c| " .,".contains(c))
+            .map(|i| i + 1)
+            .unwrap_or(0);
 
         let prefix = &input[word_start..];
 
@@ -44,7 +49,11 @@ impl LanguageModel for &Dict {
 
         // If the current character is punctuation, we check that the prefix is a valid word
         if " .,".contains(ch) {
-            return if words.contains(prefix) || prefix.is_empty() { Dict::VALID } else { Dict::INVALID };
+            return if words.contains(prefix) || prefix.is_empty() {
+                Dict::VALID
+            } else {
+                Dict::INVALID
+            };
         }
 
         let mut prefix_string = prefix.to_string();
@@ -89,13 +98,24 @@ fn main() {
             }
         }
 
-        let actual = recognizer.recognize(&ink.as_slice(), &ml::Beam { size: 64, language_model: &lm }).unwrap();
+        let actual = recognizer
+            .recognize(
+                &ink.as_slice(),
+                &ml::Beam {
+                    size: 64,
+                    language_model: &lm,
+                },
+            )
+            .unwrap();
 
         let cer = strsim::levenshtein(expected, &actual[0].0) as f32 / expected.len() as f32;
         global_err += cer;
         count += 1;
 
-        println!("[{:.4} / {:.4}] {} -> {}", cer, actual[0].1, expected, actual[0].0);
+        println!(
+            "[{:.4} / {:.4}] {} -> {}",
+            cer, actual[0].1, expected, actual[0].0
+        );
     }
 
     println!("Average CER: {:.4}", global_err / count as f32);
