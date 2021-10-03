@@ -1,7 +1,7 @@
 use crate::geom::BoundingBox;
 use crate::gesture;
 use crate::gesture::{Gesture, Tool};
-use crate::ui::{Action, Screen, Widget};
+use crate::ui::{Action, Handlers, Screen, Widget};
 use libremarkable::cgmath::{EuclideanSpace, Point2, Vector2};
 use libremarkable::framebuffer::core::Framebuffer;
 use libremarkable::framebuffer::FramebufferBase;
@@ -60,7 +60,9 @@ impl<M> App<M> {
         let mut screen = Screen::new(Framebuffer::from_path("/dev/fb0"));
         screen.clear();
 
-        let mut handlers = screen.draw(&widget);
+        let mut handlers = Handlers::new();
+        widget.render_placed(&mut handlers, screen.root(), 0.5, 0.5);
+        screen.refresh_changes();
 
         // Send all input events to input_rx
         EvDevContext::new(InputDevice::GPIO, self.input_tx.clone()).start();
@@ -76,7 +78,7 @@ impl<M> App<M> {
                         Point2::new(ink.x_range.min as i32, ink.y_range.min as i32),
                         Point2::new(ink.x_range.max.ceil() as i32, ink.y_range.max.ceil() as i32),
                     );
-                    screen.damage(bounds);
+                    screen.invalidate(bounds);
                     Some(Action::Ink(ink))
                 }
                 Some(Gesture::Stroke(Tool::Pen, from, to)) => {
@@ -94,16 +96,20 @@ impl<M> App<M> {
                         return e;
                     }
                 }
-                handlers = screen.draw(&widget);
+                handlers = Handlers::new();
+                widget.render_placed(&mut handlers, screen.root(), 0.5, 0.5);
             }
 
             // We don't want to change anything if the user is currently interacting with the screen.
             if gestures.current_ink().len() == 0 {
                 if let Ok(m) = self.message_rx.try_recv() {
                     on_input(&mut widget, Action::Unknown, m);
-                    handlers = screen.draw(&widget);
+                    handlers = Handlers::new();
+                    widget.render_placed(&mut handlers, screen.root(), 0.5, 0.5);
                 }
             }
+
+            screen.refresh_changes();
         }
 
         panic!("Unexpected end of input!")

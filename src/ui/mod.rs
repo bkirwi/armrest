@@ -1,3 +1,5 @@
+pub mod screen;
+
 pub use crate::geom::*;
 
 use crate::gesture::Touch;
@@ -21,75 +23,7 @@ use std::any::Any;
 use std::ops::{Deref, DerefMut, Range, RangeInclusive};
 use textwrap::core::Fragment;
 
-pub fn full_refresh(fb: &mut Framebuffer) {
-    fb.full_refresh(
-        waveform_mode::WAVEFORM_MODE_INIT,
-        display_temp::TEMP_USE_REMARKABLE_DRAW,
-        dither_mode::EPDC_FLAG_USE_DITHERING_ALPHA,
-        DRAWING_QUANT_BIT,
-        true,
-    );
-}
-
-pub fn quick_refresh(fb: &mut Framebuffer, rect: mxcfb_rect) {
-    fb.partial_refresh(
-        &rect,
-        PartialRefreshMode::Async,
-        waveform_mode::WAVEFORM_MODE_DU,
-        display_temp::TEMP_USE_REMARKABLE_DRAW,
-        dither_mode::EPDC_FLAG_USE_DITHERING_ALPHA,
-        DRAWING_QUANT_BIT,
-        false,
-    );
-}
-
-pub fn partial_refresh(fb: &mut Framebuffer, rect: mxcfb_rect) {
-    fb.partial_refresh(
-        &rect,
-        PartialRefreshMode::Async,
-        waveform_mode::WAVEFORM_MODE_GC16_FAST,
-        display_temp::TEMP_USE_REMARKABLE_DRAW,
-        dither_mode::EPDC_FLAG_USE_DITHERING_ALPHA,
-        DRAWING_QUANT_BIT,
-        false,
-    );
-}
-
-type ContentHash = u64;
-
-/// Represents a tree of currently-drawn widgets
-#[derive(Debug, Clone)]
-pub struct DrawTree {
-    children: Vec<(Side, i32, DrawTree)>,
-    content: ContentHash,
-}
-
-impl Default for DrawTree {
-    fn default() -> DrawTree {
-        DrawTree {
-            children: vec![],
-            content: ContentHash::MAX,
-        }
-    }
-}
-
-impl DrawTree {
-    pub fn damage(&mut self, mut damaged: BoundingBox) {
-        for (side, value, child) in &mut self.children {
-            if let Some(area) = damaged.split(*side, *value) {
-                child.damage(area);
-            }
-
-            if let Some(area) = damaged.split(side.opposite(), *value) {
-                damaged = area;
-            } else {
-                return;
-            }
-        }
-        // If we've gotten all this way, the current region is not excluded!
-        self.content = ContentHash::MAX;
-    }
-}
+pub use self::screen::*;
 
 #[derive(Debug)]
 pub struct Handlers<M> {
@@ -118,238 +52,6 @@ impl<M> Handlers<M> {
             .rev()
             .filter(move |(b, _)| b.contains(point))
             .map(|(b, m)| (b, m))
-    }
-}
-
-pub struct Screen {
-    fb: Framebuffer<'static>,
-    size: Vector2<i32>,
-    dirty: Option<BoundingBox>,
-    node: DrawTree,
-}
-
-impl Screen {
-    pub fn new(fb: Framebuffer<'static>) -> Screen {
-        Screen {
-            fb,
-            size: Vector2::new(DISPLAYWIDTH as i32, DISPLAYHEIGHT as i32),
-            dirty: None,
-            node: Default::default(),
-        }
-    }
-
-    pub fn size(&self) -> Vector2<i32> {
-        self.size
-    }
-
-    pub fn clear(&mut self) {
-        self.fb.clear();
-        self.dirty = None;
-        self.node = DrawTree::default();
-        full_refresh(&mut self.fb);
-    }
-
-    pub fn stroke(&mut self, start: Point2<i32>, end: Point2<i32>) {
-        let rect = self.fb.draw_line(start, end, 3, color::BLACK);
-        quick_refresh(&mut self.fb, rect);
-    }
-
-    pub fn damage(&mut self, bounds: BoundingBox) {
-        self.node.damage(bounds);
-    }
-
-    pub fn draw<W: Widget>(&mut self, widget: &W) -> Handlers<W::Message> {
-        let mut handlers = Handlers::new();
-        let frame = Frame::root(&mut self.fb, &mut self.node, &mut self.dirty);
-        widget.render_placed(&mut handlers, frame, 0.5, 0.5);
-        if let Some(bounds) = self.dirty.take() {
-            partial_refresh(&mut self.fb, bounds.rect());
-        }
-        handlers
-    }
-}
-
-pub struct Canvas<'a>(Frame<'a>);
-
-impl<'a> Canvas<'a> {
-    pub fn framebuffer(&mut self) -> &mut Framebuffer<'static> {
-        self.0.fb
-    }
-
-    pub fn bounds(&self) -> BoundingBox {
-        self.0.bounds
-    }
-
-    fn ink(&mut self, ink: &Ink) {
-        let offset = self.0.bounds.top_left - Point2::origin();
-        for stroke in ink.strokes() {
-            let mut last = &stroke[0];
-            for point in &stroke[..] {
-                self.0.fb.draw_line(
-                    Point2::new(last.x, last.y).map(|c| c as i32) + offset,
-                    Point2::new(point.x, point.y).map(|c| c as i32) + offset,
-                    3,
-                    color::BLACK,
-                );
-                last = point;
-            }
-        }
-    }
-
-    fn write(&mut self, x: i32, y: i32, color: u8) {
-        let BoundingBox {
-            top_left,
-            bottom_right,
-        } = self.0.bounds;
-        let point = Point2::new(top_left.x + x, top_left.y + y);
-        // NB: this impl already contains the bounds check!
-        if point.x < bottom_right.x && point.y < bottom_right.y {
-            self.0.fb.write_pixel(point, color::GRAY(color));
-        }
-    }
-}
-
-pub struct Frame<'a> {
-    fb: &'a mut Framebuffer<'static>,
-    dirty: &'a mut Option<BoundingBox>,
-    bounds: BoundingBox,
-    node: &'a mut DrawTree,
-    index: usize,
-    content: ContentHash,
-}
-
-impl Drop for Frame<'_> {
-    fn drop(&mut self) {
-        self.truncate();
-    }
-}
-
-impl<'a> Frame<'a> {
-    pub fn root(
-        fb: &'a mut Framebuffer<'static>,
-        node: &'a mut DrawTree,
-        dirty: &'a mut Option<BoundingBox>,
-    ) -> Frame<'a> {
-        Frame {
-            fb,
-            dirty,
-            bounds: BoundingBox::new(
-                Point2::origin(),
-                Point2::new(DISPLAYWIDTH as i32, DISPLAYHEIGHT as i32),
-            ),
-            node,
-            index: 0,
-            content: 0,
-        }
-    }
-
-    fn mark_dirty(&mut self) {
-        let result = match self.dirty {
-            None => Some(self.bounds),
-            Some(d) => Some(self.bounds.union(*d)),
-        };
-        *self.dirty = result;
-    }
-
-    fn truncate(&mut self) {
-        if self.index != self.node.children.len() || self.content != self.node.content {
-            // Clear the rest of the node and blank the remaining area.
-            self.node.children.truncate(self.index);
-            self.fb.fill_rect(
-                self.bounds.top_left,
-                self.bounds.size().map(|c| c as u32),
-                color::WHITE,
-            );
-            self.mark_dirty();
-            self.node.content = 0;
-            self.content = 0;
-        }
-    }
-
-    pub fn canvas(mut self, hash: ContentHash) -> Option<Canvas<'a>> {
-        if hash == self.node.content {
-            self.content = hash;
-            None
-        } else {
-            self.truncate();
-            self.content = hash;
-            self.node.content = hash;
-            Some(Canvas(self))
-        }
-    }
-
-    pub fn split_off(&mut self, split: Side, offset: i32) -> Frame {
-        let size = self.bounds.size();
-        let split_value = match split {
-            Side::Left => self.bounds.top_left.x + offset.min(size.x),
-            Side::Right => self.bounds.bottom_right.x - offset.min(size.x),
-            Side::Top => self.bounds.top_left.y + offset.min(size.y),
-            Side::Bottom => self.bounds.bottom_right.y - offset.min(size.y),
-        };
-
-        let should_truncate = self
-            .node
-            .children
-            .get(self.index)
-            .map_or(true, |(s, v, _)| *s != split || *v != split_value);
-
-        if should_truncate {
-            self.truncate();
-            self.node
-                .children
-                .push((split, split_value, DrawTree::default()));
-        }
-
-        let (_, _, split_node) = &mut self.node.children[self.index];
-
-        // TODO: would be better to support an empty frame than this!
-        let split_bounds = self
-            .bounds
-            .split(split, split_value)
-            .expect(&format!("Unable to split: {:?}/{}", split, offset));
-        let remaining_bounds = self.bounds.split(split.opposite(), split_value).unwrap();
-        self.bounds = remaining_bounds;
-
-        self.index += 1;
-
-        Frame {
-            fb: self.fb,
-            dirty: self.dirty,
-            bounds: split_bounds,
-            node: split_node,
-            index: 0,
-            content: 0,
-        }
-    }
-
-    pub fn remaining(&self) -> Vector2<i32> {
-        self.bounds.size()
-    }
-
-    fn space(&mut self, a: Side, b: Side, extra: i32, ratio: f32) {
-        if extra > 0 {
-            let offset = (extra as f32 * ratio) as i32;
-            self.split_off(a, offset);
-            self.split_off(b, extra - offset);
-        }
-    }
-
-    pub fn horizontal_space(&mut self, width: i32, placement: f32) {
-        self.space(
-            Side::Left,
-            Side::Right,
-            self.remaining().x - width,
-            placement,
-        );
-    }
-
-    pub fn vertical_space(&mut self, height: i32, placement: f32) {
-        self.space(
-            Side::Top,
-            Side::Bottom,
-            self.remaining().y - height,
-            placement,
-        );
     }
 }
 
@@ -418,199 +120,7 @@ pub trait Widget {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct Text<'a, M = NoMessage> {
-    bounds: Vector2<i32>,
-    glyphs: Vec<PositionedGlyph<'a>>,
-    content_hash: ContentHash,
-    pub on_touch: Option<M>,
-}
-
-#[derive(Debug)]
-struct Word<'a> {
-    glyphs: Vec<PositionedGlyph<'a>>,
-    space_width: usize,
-}
-
 pub enum NoMessage {}
-
-impl<'a> Fragment for Word<'a> {
-    fn width(&self) -> usize {
-        let width = self
-            .glyphs
-            .iter()
-            .map(|g| g.pixel_bounding_box().map(|r| r.max.x).unwrap_or(0))
-            .max()
-            .unwrap_or(0);
-
-        width as usize
-    }
-
-    fn whitespace_width(&self) -> usize {
-        self.space_width
-    }
-
-    fn penalty_width(&self) -> usize {
-        0
-    }
-}
-
-impl<'a, M> Text<'a, M> {
-    pub fn on_touch(self, message: Option<M>) -> Text<'a, M> {
-        Text {
-            bounds: self.bounds,
-            glyphs: self.glyphs,
-            content_hash: self.content_hash,
-            on_touch: message,
-        }
-    }
-
-    pub fn layout(font: &Font<'a>, string: &str, size: i32) -> Text<'a, M> {
-        let scale = Scale {
-            x: size as f32,
-            y: size as f32,
-        };
-        let v_metrics = font.v_metrics(scale);
-        let glyphs: Vec<_> = font
-            .layout(string, scale, point(0f32, v_metrics.ascent))
-            .collect();
-
-        let max_x = glyphs
-            .iter()
-            .filter_map(|g| g.pixel_bounding_box())
-            .map(|b| b.max.x)
-            .max()
-            .unwrap_or(0);
-
-        let mut hasher = DefaultHasher::new();
-        (font as *const _ as usize).hash(&mut hasher);
-        string.hash(&mut hasher);
-        let hash = hasher.finish();
-
-        Text {
-            bounds: Vector2::new(max_x, size),
-            glyphs,
-            content_hash: hash,
-            on_touch: None,
-        }
-    }
-
-    pub fn wrap(
-        font: &Font<'a>,
-        text: &str,
-        max_width: i32,
-        size: i32,
-        justify: bool,
-    ) -> Vec<Text<'a, M>> {
-        let scale = Scale {
-            x: size as f32,
-            y: size as f32,
-        };
-        let v_metrics = font.v_metrics(scale);
-
-        let space_width = font.glyph(' ').scaled(scale).h_metrics().advance_width;
-
-        let words: Vec<Word> = text
-            .split_ascii_whitespace()
-            .map(|s| Word {
-                glyphs: font
-                    .layout(s, scale, point(0f32, v_metrics.ascent))
-                    .collect(),
-                space_width: space_width as usize,
-            })
-            .collect();
-
-        let lines: Vec<&[Word]> = textwrap::core::wrap_optimal_fit(&words, |_| max_width as usize);
-
-        let mut result = vec![];
-
-        for (i, &line) in lines.iter().enumerate() {
-            let mut max_x = 0;
-            let _max_y = 0;
-
-            let text_width: usize = line.iter().map(|x| x.width()).sum();
-            let justified_space_width = if !justify || line.len() <= 1 {
-                space_width
-            } else {
-                let best_width = (max_width - text_width as i32) as f32 / (line.len() - 1) as f32;
-                if i == lines.len() - 1 {
-                    // the last line in a paragraph should never be stretched, but may need to be compressed slightly!
-                    best_width.min(space_width)
-                } else {
-                    best_width
-                }
-            };
-
-            let mut hasher = DefaultHasher::new();
-
-            let mut start_x = 0f32;
-            let mut all_glyphs = vec![];
-            for word in line {
-                // Loop through the glyphs in the text, positing each one on a line
-                let mut word_max = 0;
-
-                // TODO: better than this!
-                word.glyphs.len().hash(&mut hasher);
-
-                for g in &word.glyphs {
-                    let mut glyph = g.clone();
-                    if let Some(bounding_box) = glyph.pixel_bounding_box() {
-                        let mut position = glyph.position();
-                        position.x += start_x;
-                        glyph.set_position(position);
-                        word_max = word_max.max(bounding_box.max.x);
-
-                        max_x = max_x.max(glyph.pixel_bounding_box().unwrap().max.x);
-                    }
-                    all_glyphs.push(glyph);
-                }
-
-                start_x += (word_max as f32) + justified_space_width;
-            }
-
-            let hash = hasher.finish();
-
-            result.push(Text {
-                bounds: Vector2::new(max_x, size),
-                glyphs: all_glyphs,
-                content_hash: hash,
-                on_touch: None,
-            })
-        }
-
-        result
-    }
-}
-
-impl<M: Clone> Widget for Text<'_, M> {
-    type Message = M;
-
-    fn size(&self) -> Vector2<i32> {
-        self.bounds
-    }
-
-    fn render(&self, handlers: &mut Handlers<Self::Message>, mut sink: Frame) {
-        if let Some(m) = self.on_touch.clone() {
-            handlers.push(&sink, m);
-        }
-
-        if let Some(mut canvas) = sink.canvas(self.content_hash) {
-            for glyph in &self.glyphs {
-                // Draw the glyph into the image per-pixel by using the draw closure
-                if let Some(bounding_box) = glyph.pixel_bounding_box() {
-                    glyph.draw(|x, y, v| {
-                        let mult = v * 255.0;
-                        canvas.write(
-                            bounding_box.min.x + x as i32,
-                            bounding_box.min.y + y as i32,
-                            mult as u8,
-                        );
-                    });
-                }
-            }
-        }
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct Stack<T> {
@@ -909,21 +419,21 @@ pub struct TextBuilder<M> {
     on_input: Vec<(Range<usize>, M)>,
 }
 
-pub struct ActualText<M> {
+pub struct Text<M> {
     size: Vector2<i32>,
     glyphs: Vec<PositionedGlyph<'static>>,
     hash: u64,
     on_input: Vec<(Range<i32>, M)>,
 }
 
-impl<M> ActualText<M> {
-    pub fn literal(size: i32, font: &Font<'static>, text: &str) -> ActualText<M> {
+impl<M> Text<M> {
+    pub fn literal(size: i32, font: &Font<'static>, text: &str) -> Text<M> {
         let mut builder = TextBuilder::from_font(size, font);
         builder.push_literal(font, size as f32, text);
         builder.into_text()
     }
 
-    pub fn line(size: i32, font: &Font<'static>, text: &str) -> ActualText<M> {
+    pub fn line(size: i32, font: &Font<'static>, text: &str) -> Text<M> {
         let mut builder = TextBuilder::from_font(size, font);
         builder.push_words(font, size as f32, text, None);
         builder.into_text()
@@ -935,7 +445,7 @@ impl<M> ActualText<M> {
         text: &str,
         max_width: i32,
         justify: bool,
-    ) -> Vec<ActualText<M>>
+    ) -> Vec<Text<M>>
     where
         M: Clone,
     {
@@ -945,7 +455,7 @@ impl<M> ActualText<M> {
     }
 }
 
-impl<M: Clone> Widget for ActualText<M> {
+impl<M: Clone> Widget for Text<M> {
     type Message = M;
 
     fn size(&self) -> Vector2<i32> {
@@ -998,7 +508,7 @@ impl<M> TextBuilder<M> {
         TextBuilder::new(height, font.v_metrics(Scale::uniform(height as f32)).ascent)
     }
 
-    pub fn into_text(self) -> ActualText<M> {
+    pub fn into_text(self) -> Text<M> {
         // Iterate over the words, collecting all the glyphs and adjusting them
         // to their final position.
         let mut word_start = 0.0;
@@ -1038,7 +548,7 @@ impl<M> TextBuilder<M> {
             .map(|(r, m)| (word_ranges[r.start].start..word_ranges[r.end - 1].end, m))
             .collect();
 
-        ActualText {
+        Text {
             size: Vector2::new(word_start.ceil() as i32, self.height),
             glyphs,
             hash: hasher.finish(),
@@ -1114,7 +624,7 @@ impl<M> TextBuilder<M> {
     }
 
     /// Consume the given text, and return a vector of Texts split optimally into lines.
-    pub fn wrap(mut self, length: i32, justify: bool) -> Vec<ActualText<M>>
+    pub fn wrap(mut self, length: i32, justify: bool) -> Vec<Text<M>>
     where
         M: Clone,
     {
