@@ -12,7 +12,9 @@ use std::hash::{Hash, Hasher};
 
 use std::ops::{Deref, DerefMut};
 
-use crate::ui::Frame;
+use crate::ui::{ContentHash, Frame};
+use libremarkable::framebuffer::common::color;
+use libremarkable::image::{GrayImage, RgbImage};
 
 #[derive(Debug)]
 pub struct Handlers<M> {
@@ -340,5 +342,67 @@ where
             handlers.push(&sink, m);
         }
         self.pages[self.current_page].render(handlers, sink)
+    }
+}
+
+struct Fill {
+    size: Vector2<i32>,
+    color: u8,
+}
+
+impl Fill {
+    pub fn new(size: Vector2<i32>, color: u8) -> Fill {
+        Fill { size, color }
+    }
+}
+
+impl Widget for Fill {
+    type Message = NoMessage;
+
+    fn size(&self) -> Vector2<i32> {
+        self.size
+    }
+
+    fn render(&self, _: &mut Handlers<Self::Message>, frame: Frame) {
+        if let Some(mut canvas) = frame.canvas(self.color as ContentHash) {
+            let bounds = canvas.bounds();
+            canvas.framebuffer().fill_rect(
+                bounds.top_left,
+                bounds.size().map(|c| c as u32),
+                color::GRAY(self.color),
+            );
+        }
+    }
+}
+
+struct Image {
+    data: GrayImage,
+    hash: ContentHash,
+}
+
+impl Image {
+    pub fn new(image: GrayImage) -> Image {
+        let mut hasher = DefaultHasher::new();
+        image.hash(&mut hasher);
+        Image {
+            data: image,
+            hash: hasher.finish(),
+        }
+    }
+}
+
+impl Widget for Image {
+    type Message = NoMessage;
+
+    fn size(&self) -> Vector2<i32> {
+        Vector2::new(self.data.width() as i32, self.data.height() as i32)
+    }
+
+    fn render(&self, _: &mut Handlers<Self::Message>, frame: Frame) {
+        if let Some(mut canvas) = frame.canvas(self.hash) {
+            for (x, y, p) in self.data.enumerate_pixels() {
+                canvas.write(x as i32, y as i32, p.data[0])
+            }
+        }
     }
 }

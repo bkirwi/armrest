@@ -35,10 +35,6 @@ impl BoundingBox {
         }
     }
 
-    pub fn from_size(top_left: Point2<i32>, size: Vector2<i32>) -> BoundingBox {
-        BoundingBox::new(top_left, top_left + size)
-    }
-
     pub fn point(only: Point2<i32>) -> BoundingBox {
         BoundingBox::new(only, only)
     }
@@ -141,10 +137,6 @@ impl BoundingBox {
         let bottom_right = self.bottom_right.sub_element_wise(padding);
 
         BoundingBox::new(top_left, bottom_right)
-    }
-
-    pub fn height(&self) -> i32 {
-        self.bottom_right.y - self.top_left.y
     }
 
     pub fn size(&self) -> Vector2<i32> {

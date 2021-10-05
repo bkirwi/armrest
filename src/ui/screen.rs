@@ -244,12 +244,6 @@ impl<'a> Frame<'a> {
 
     /// Split a smaller canvas off from this one, at the given side and offset.
     /// The current frame is modified to represent the remaining area in the frame.
-    ///
-    /// ```
-    /// use armrest::geom::Side;
-    ///
-    /// let new_frame = frame.split_off(Side::Left, 100);
-    /// ```
     pub fn split_off(&mut self, side: Side, offset: i32) -> Frame {
         let size = self.bounds.size();
         let split_value = match side {
