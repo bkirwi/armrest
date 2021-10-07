@@ -109,6 +109,38 @@ pub trait Widget {
         let widget_area = frame.split_off(split, amount);
         self.render_placed(handlers, widget_area, positioning, positioning);
     }
+
+    fn map<F: Fn(Self::Message) -> A, A>(self, map_fn: F) -> Mapped<Self, F>
+    where
+        Self: Sized,
+    {
+        Mapped {
+            nested: self,
+            map_fn,
+        }
+    }
+}
+
+pub struct Mapped<T, F> {
+    nested: T,
+    map_fn: F,
+}
+
+impl<T: Widget, A, F: Fn(T::Message) -> A> Widget for Mapped<T, F> {
+    type Message = A;
+
+    fn size(&self) -> Vector2<i32> {
+        self.nested.size()
+    }
+
+    fn render(&self, handlers: &mut Handlers<Self::Message>, frame: Frame) {
+        let mut nested_handlers: Handlers<T::Message> = Handlers::new();
+        let map_fn = &self.map_fn;
+        self.nested.render(&mut nested_handlers, frame);
+        for (bb, a) in nested_handlers.handlers {
+            handlers.handlers.push((bb, map_fn(a)));
+        }
+    }
 }
 
 pub enum NoMessage {}
