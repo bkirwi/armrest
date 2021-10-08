@@ -15,6 +15,7 @@ use std::ops::{Deref, DerefMut};
 use crate::ui::{ContentHash, Frame};
 use libremarkable::framebuffer::common::color;
 use libremarkable::image::{GrayImage, RgbImage};
+use std::marker::PhantomData;
 
 #[derive(Debug)]
 pub struct Handlers<M> {
@@ -110,14 +111,44 @@ pub trait Widget {
         self.render_placed(handlers, widget_area, positioning, positioning);
     }
 
-    fn map<F: Fn(Self::Message) -> A, A>(self, map_fn: F) -> Mapped<Self, F>
+    fn map<F: Fn(Self::Message) -> A, A>(&self, map_fn: F) -> Mapped<&Self, F>
     where
         Self: Sized,
     {
         Mapped {
-            nested: self,
+            nested: &self,
             map_fn,
         }
+    }
+
+    fn void<A>(&self) -> Mapped<&Self, fn(Self::Message) -> A>
+    where
+        Self: Sized,
+        Self::Message: IsVoid,
+    {
+        self.map(IsVoid::into_any)
+    }
+
+    fn discard<A>(&self) -> Discard<&Self, A>
+    where
+        Self: Sized,
+    {
+        Discard {
+            nested: &self,
+            _phantom: Default::default(),
+        }
+    }
+}
+
+impl<A: Widget> Widget for &A {
+    type Message = A::Message;
+
+    fn size(&self) -> Vector2<i32> {
+        (*self).size()
+    }
+
+    fn render(&self, handlers: &mut Handlers<Self::Message>, frame: Frame) {
+        (*self).render(handlers, frame)
     }
 }
 
@@ -143,7 +174,36 @@ impl<T: Widget, A, F: Fn(T::Message) -> A> Widget for Mapped<T, F> {
     }
 }
 
-pub enum NoMessage {}
+pub struct Discard<T, A> {
+    nested: T,
+    _phantom: PhantomData<A>,
+}
+
+impl<T: Widget, A> Widget for Discard<T, A> {
+    type Message = A;
+
+    fn size(&self) -> Vector2<i32> {
+        self.nested.size()
+    }
+
+    fn render(&self, _handlers: &mut Handlers<Self::Message>, frame: Frame) {
+        let mut nested_handlers: Handlers<T::Message> = Handlers::new();
+        self.nested.render(&mut nested_handlers, frame);
+    }
+}
+
+#[derive(Copy, Clone)]
+pub enum Void {}
+
+pub trait IsVoid {
+    fn into_any<A>(self) -> A;
+}
+
+impl IsVoid for Void {
+    fn into_any<A>(self) -> A {
+        match self {}
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct Stack<T> {
@@ -217,7 +277,7 @@ impl<T> DerefMut for Stack<T> {
     }
 }
 
-pub struct InputArea<M = NoMessage> {
+pub struct InputArea<M = Void> {
     size: Vector2<i32>,
     pub ink: Ink,
     on_ink: Option<M>,
@@ -273,7 +333,6 @@ impl<M: Clone> Widget for InputArea<M> {
 pub struct Paged<T: Widget> {
     current_page: usize,
     pages: Vec<T>,
-    on_touch: Option<T::Message>,
 }
 
 impl<T: Widget> Paged<T> {
@@ -281,12 +340,7 @@ impl<T: Widget> Paged<T> {
         Paged {
             current_page: 0,
             pages: vec![widget],
-            on_touch: None,
         }
-    }
-
-    pub fn on_touch(&mut self, message: Option<T::Message>) {
-        self.on_touch = message;
     }
 
     pub fn push(&mut self, widget: T) {
@@ -370,14 +424,11 @@ where
     }
 
     fn render(&self, handlers: &mut Handlers<Self::Message>, sink: Frame) {
-        if let Some(m) = self.on_touch.clone() {
-            handlers.push(&sink, m);
-        }
         self.pages[self.current_page].render(handlers, sink)
     }
 }
 
-struct Fill {
+pub struct Fill {
     size: Vector2<i32>,
     color: u8,
 }
@@ -389,7 +440,7 @@ impl Fill {
 }
 
 impl Widget for Fill {
-    type Message = NoMessage;
+    type Message = Void;
 
     fn size(&self) -> Vector2<i32> {
         self.size
@@ -424,7 +475,7 @@ impl Image {
 }
 
 impl Widget for Image {
-    type Message = NoMessage;
+    type Message = Void;
 
     fn size(&self) -> Vector2<i32> {
         Vector2::new(self.data.width() as i32, self.data.height() as i32)
