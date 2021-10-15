@@ -5,7 +5,7 @@ use rusttype::Font;
 
 use armrest::app;
 use armrest::ui;
-use armrest::ui::Widget;
+use armrest::ui::{Text, Widget};
 
 fn main() {
     let font: Font<'static> = {
@@ -42,12 +42,12 @@ fn main() {
     let big_string =
         "and but that blow would be the be-all and the end-all here, then here, ".repeat(10);
 
-    let mut text = ui::TextBuilder::from_font(44, &font);
-    text.push_words(&big_string, None);
-    text.push_words(&big_string, Some("ok"));
-    let lines = text.wrap(1000, true);
-
-    dbg!(lines.len(), lines[0].size());
+    let lines = Text::builder(44, &font)
+        .words(&big_string)
+        .message("ok")
+        .font(&font2, 44.0)
+        .words(&big_string)
+        .wrap(1000, true);
 
     let mut stack = ui::Stack::new(Vector2::new(1000, 1800));
 

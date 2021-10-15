@@ -84,15 +84,11 @@ impl<M> Text<M> {
     }
 
     pub fn literal(size: i32, font: &Font<'static>, text: &str) -> Text<M> {
-        let mut builder = TextBuilder::from_font(size, font);
-        builder.push_literal(size as f32, text);
-        builder.into_text()
+        Text::builder(size, font).literal(text).into_text()
     }
 
     pub fn line(size: i32, font: &Font<'static>, text: &str) -> Text<M> {
-        let mut builder = TextBuilder::from_font(size, font);
-        builder.push_words(text, None);
-        builder.into_text()
+        Text::builder(size, font).words(text).into_text()
     }
 
     pub fn wrap(
@@ -105,9 +101,9 @@ impl<M> Text<M> {
     where
         M: Clone,
     {
-        let mut builder = TextBuilder::from_font(size, font);
-        builder.push_words(text, None);
-        builder.wrap(max_width, justify)
+        Text::builder(size, font)
+            .words(text)
+            .wrap(max_width, justify)
     }
 }
 
@@ -159,8 +155,9 @@ pub struct TextBuilder<'a, M = Void> {
     indent: f32,
     current_font: &'a Font<'static>,
     current_scale: f32,
+    current_message: Option<(M, Option<(usize, f32)>)>,
     words: Vec<Span>,
-    on_input: Vec<(Range<usize>, M)>,
+    on_input: Vec<(usize, f32, usize, f32, M)>,
 }
 
 impl<'a, M> TextBuilder<'a, M> {
@@ -173,15 +170,41 @@ impl<'a, M> TextBuilder<'a, M> {
             baseline,
             current_font: font,
             current_scale: height as f32,
+            current_message: None,
             indent: 0.0,
             words: vec![],
             on_input: vec![],
         }
     }
 
-    pub fn with_font(&mut self, font: &'a Font<'static>, scale: f32) {
+    pub fn font(mut self, font: &'a Font<'static>, scale: f32) -> Self {
         self.current_font = font;
         self.current_scale = scale;
+        self
+    }
+
+    pub fn message(mut self, message: M) -> Self {
+        if self.current_message.is_some() {
+            todo!("Close the current message");
+        }
+
+        self.current_message = Some((message, None));
+
+        self
+    }
+
+    pub fn no_message(mut self) -> Self {
+        if let Some((message, Some((start, start_offset)))) = self.current_message.take() {
+            assert!(
+                self.words.len() > 1,
+                "The word list must not be empty at this point!"
+            );
+            let end = self.words.len() - 1;
+            let end_offset = self.words[end].width;
+            self.on_input
+                .push((start, start_offset, end, end_offset, message));
+        }
+        self
     }
 
     pub fn into_text(self) -> Text<M> {
@@ -191,11 +214,12 @@ impl<'a, M> TextBuilder<'a, M> {
         let mut last_space = 0.0;
         let mut glyphs = vec![];
 
-        let mut word_ranges: Vec<Range<i32>> = vec![];
+        let mut word_starts: Vec<f32> = vec![];
 
         let mut hasher = DefaultHasher::new();
         for (_i, word) in self.words.into_iter().enumerate() {
             word_start += last_space;
+            word_starts.push(word_start);
 
             for mut glyph in word.glyphs {
                 let mut pos = glyph.position();
@@ -209,8 +233,6 @@ impl<'a, M> TextBuilder<'a, M> {
                 glyphs.push(glyph);
             }
 
-            word_ranges.push((word_start as i32)..((word_start + word.width).ceil() as i32));
-
             word_start += word.width;
             last_space = match word.word_end {
                 WordEnd::Sticky => 0.0,
@@ -221,7 +243,11 @@ impl<'a, M> TextBuilder<'a, M> {
         let on_input = self
             .on_input
             .into_iter()
-            .map(|(r, m)| (word_ranges[r.start].start..word_ranges[r.end - 1].end, m))
+            .map(|(s, so, e, eo, m)| {
+                let start = (word_starts[s] + so) as i32;
+                let end = (word_starts[e] + eo).ceil() as i32;
+                (start..end, m)
+            })
             .collect();
 
         Text {
@@ -232,7 +258,7 @@ impl<'a, M> TextBuilder<'a, M> {
         }
     }
 
-    pub fn push_space(&mut self) {
+    pub fn space(mut self) -> Self {
         let size = space_width(self.current_font, Scale::uniform(self.current_scale));
         if let Some(Span { word_end, .. }) = self.words.last_mut() {
             let new_space = match *word_end {
@@ -243,67 +269,66 @@ impl<'a, M> TextBuilder<'a, M> {
         } else {
             self.indent += size;
         }
+        self
     }
 
-    pub fn push_literal(&mut self, scale: f32, text: &str) {
+    pub fn literal(mut self, text: &str) -> Self {
+        let word_count = self.words.len();
         if let Some(Span {
             glyphs,
             word_end: WordEnd::Sticky,
             width,
         }) = self.words.last_mut()
         {
+            // Current text does not end in a space... append the new characters to the current word.
             let word = Span::layout(
                 self.current_font,
                 text,
-                scale,
+                self.current_scale,
                 Point2::new(*width, self.baseline),
             );
+
+            if let Some((_, start @ Option::None)) = &mut self.current_message {
+                *start = Some((word_count - 1, *width));
+            }
+
             glyphs.extend(word.glyphs);
             *width += word.width;
         } else {
             let word = Span::layout(
                 self.current_font,
                 text,
-                scale,
-                Point2::new(0.0, self.baseline),
-            );
-            self.words.push(word);
-        }
-    }
-
-    /// Split the given string into words, and append each of them to the current Text.
-    pub fn push_words(&mut self, text: &str, message: Option<M>) {
-        let start_index = self.words.len();
-
-        if text.starts_with(|c: char| c.is_ascii_whitespace()) {
-            self.push_space();
-        }
-
-        for pos in text.split_ascii_whitespace().with_position() {
-            let word = Span::layout(
-                self.current_font,
-                pos.into_inner(),
                 self.current_scale,
                 Point2::new(0.0, self.baseline),
             );
-            self.words.push(word);
 
-            match pos {
-                Position::First(_) | Position::Middle(_) => {
-                    self.push_space();
-                }
-                _ => {}
+            if let Some((_, start @ Option::None)) = &mut self.current_message {
+                *start = Some((word_count, 0.0));
             }
+
+            self.words.push(word);
+        }
+        self
+    }
+
+    /// Split the given string into words, and append each of them to the current Text.
+    pub fn words(mut self, text: &str) -> Self {
+        if text.starts_with(|c: char| c.is_ascii_whitespace()) {
+            self = self.space();
+        }
+
+        for token in text.split_ascii_whitespace().intersperse(" ") {
+            match token {
+                " " => self = self.space(),
+                other => self = self.literal(other),
+            };
         }
 
         if text.ends_with(|c: char| c.is_ascii_whitespace()) {
-            self.push_space();
+            self = self.space();
         }
 
-        let end_index = self.words.len();
-        if let Some(m) = message {
-            self.on_input.push((start_index..end_index, m));
-        }
+        self
     }
 
     /// Consume the given text, and return a vector of Texts split optimally into lines.
@@ -327,25 +352,35 @@ impl<'a, M> TextBuilder<'a, M> {
         for (i, line) in lines.iter().enumerate() {
             let end_index = index + line.len();
 
-            let mut on_input = vec![];
-            while self
+            // First, we peel off the messages that are entirely in the current span.
+            let split_index = self
                 .on_input
-                .last()
-                .map_or(false, |(r, _)| r.end <= end_index)
+                .iter()
+                .position(|(_, _, end_offset, _, _)| *end_offset >= end_index)
+                .unwrap_or(self.on_input.len());
+
+            let mut current_input = self.on_input.split_off(split_index);
+            for (s, so, e, eo, m) in &mut current_input {
+                *s -= index;
+                *e -= index;
+            }
+
+            // It's possible that the first remaining range extends into the current as well.
+            // If so, split it in half and keep the first half.
+            if let Some((start, start_offset, end, end_offset, message)) = self.on_input.first_mut()
             {
-                on_input.push(self.on_input.pop().unwrap());
-            }
+                if *start < end_index {
+                    current_input.push((
+                        *start - index,
+                        *start_offset,
+                        line.len() - 1,
+                        line.last().unwrap().width,
+                        message.clone(),
+                    ));
 
-            if let Some((r, m)) = self.on_input.last_mut() {
-                if r.start < end_index {
-                    on_input.push((r.start..end_index, m.clone()));
-                    r.start = end_index;
+                    *start = end_index;
+                    *start_offset = 0.0;
                 }
-            }
-
-            for (r, _) in &mut on_input {
-                r.start -= index;
-                r.end -= index;
             }
 
             index = end_index;
@@ -358,8 +393,9 @@ impl<'a, M> TextBuilder<'a, M> {
                 indent,
                 current_font: self.current_font,
                 current_scale: self.current_scale,
+                current_message: None,
                 words: line.to_vec(),
-                on_input: on_input,
+                on_input: current_input,
             });
         }
 
