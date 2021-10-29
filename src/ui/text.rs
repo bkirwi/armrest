@@ -293,7 +293,7 @@ impl<'a, M> TextBuilder<'a, M> {
             }
 
             glyphs.extend(word.glyphs);
-            *width += word.width;
+            *width = word.width;
         } else {
             let word = Span::layout(
                 self.current_font,
