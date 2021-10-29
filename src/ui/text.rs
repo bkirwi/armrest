@@ -71,6 +71,7 @@ impl Fragment for Span {
     }
 }
 
+#[derive(Clone)]
 pub struct Text<M = Void> {
     size: Vector2<i32>,
     glyphs: Vec<PositionedGlyph<'static>>,
@@ -177,8 +178,12 @@ impl<'a, M> TextBuilder<'a, M> {
         }
     }
 
-    pub fn font(mut self, font: &'a Font<'static>, scale: f32) -> Self {
+    pub fn font(mut self, font: &'a Font<'static>) -> Self {
         self.current_font = font;
+        self
+    }
+
+    pub fn scale(mut self, scale: f32) -> Self {
         self.current_scale = scale;
         self
     }
