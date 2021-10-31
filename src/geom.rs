@@ -1,4 +1,4 @@
-use libremarkable::cgmath::{ElementWise, Point2, Vector2};
+use libremarkable::cgmath::{ElementWise, EuclideanSpace, Point2, Vector2};
 use libremarkable::framebuffer::common::mxcfb_rect;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -21,36 +21,36 @@ impl Side {
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub struct BoundingBox {
+pub struct Region {
     pub top_left: Point2<i32>,
     pub bottom_right: Point2<i32>,
 }
 
-impl BoundingBox {
-    pub fn new(top_left: Point2<i32>, bottom_right: Point2<i32>) -> BoundingBox {
+impl Region {
+    pub fn new(top_left: Point2<i32>, bottom_right: Point2<i32>) -> Region {
         assert!(top_left.x <= bottom_right.x && top_left.y <= bottom_right.y);
-        BoundingBox {
+        Region {
             top_left,
             bottom_right,
         }
     }
 
-    pub fn point(only: Point2<i32>) -> BoundingBox {
-        BoundingBox::new(only, only)
+    pub fn point(only: Point2<i32>) -> Region {
+        Region::new(only, only)
     }
 
-    pub fn translate(&self, vec: Vector2<i32>) -> BoundingBox {
-        BoundingBox {
+    pub fn translate(&self, vec: Vector2<i32>) -> Region {
+        Region {
             top_left: self.top_left + vec,
             bottom_right: self.bottom_right + vec,
         }
     }
 
-    pub fn split(&self, split: Side, value: i32) -> Option<BoundingBox> {
+    pub fn split(&self, split: Side, value: i32) -> Option<Region> {
         match split {
             Side::Left => {
                 if value >= self.top_left.x {
-                    Some(BoundingBox::new(
+                    Some(Region::new(
                         self.top_left,
                         Point2::new(value, self.bottom_right.y),
                     ))
@@ -60,7 +60,7 @@ impl BoundingBox {
             }
             Side::Right => {
                 if value <= self.bottom_right.x {
-                    Some(BoundingBox::new(
+                    Some(Region::new(
                         Point2::new(value, self.top_left.y),
                         self.bottom_right,
                     ))
@@ -70,7 +70,7 @@ impl BoundingBox {
             }
             Side::Top => {
                 if value >= self.top_left.y {
-                    Some(BoundingBox::new(
+                    Some(Region::new(
                         self.top_left,
                         Point2::new(self.bottom_right.x, value),
                     ))
@@ -80,7 +80,7 @@ impl BoundingBox {
             }
             Side::Bottom => {
                 if value <= self.bottom_right.y {
-                    Some(BoundingBox::new(
+                    Some(Region::new(
                         Point2::new(self.top_left.x, value),
                         self.bottom_right,
                     ))
@@ -98,7 +98,7 @@ impl BoundingBox {
             && point.y < self.bottom_right.y
     }
 
-    pub fn intersect(&self, other: BoundingBox) -> Option<BoundingBox> {
+    pub fn intersect(&self, other: Region) -> Option<Region> {
         if other.bottom_right.x <= self.top_left.x
             || self.bottom_right.x <= other.top_left.x
             || other.bottom_right.y <= self.top_left.y
@@ -106,7 +106,7 @@ impl BoundingBox {
         {
             None
         } else {
-            Some(BoundingBox {
+            Some(Region {
                 top_left: Point2 {
                     x: self.top_left.x.max(other.top_left.x),
                     y: self.top_left.y.max(other.top_left.y),
@@ -119,8 +119,8 @@ impl BoundingBox {
         }
     }
 
-    pub fn union(&self, other: BoundingBox) -> BoundingBox {
-        BoundingBox {
+    pub fn union(&self, other: Region) -> Region {
+        Region {
             top_left: Point2 {
                 x: self.top_left.x.min(other.top_left.x),
                 y: self.top_left.y.min(other.top_left.y),
@@ -132,11 +132,11 @@ impl BoundingBox {
         }
     }
 
-    pub fn pad(&self, padding: i32) -> BoundingBox {
+    pub fn pad(&self, padding: i32) -> Region {
         let top_left = self.top_left.add_element_wise(padding);
         let bottom_right = self.bottom_right.sub_element_wise(padding);
 
-        BoundingBox::new(top_left, bottom_right)
+        Region::new(top_left, bottom_right)
     }
 
     pub fn size(&self) -> Vector2<i32> {
@@ -152,5 +152,20 @@ impl BoundingBox {
             width: area.x as u32,
             height: area.y as u32,
         }
+    }
+}
+
+pub trait Regional {
+    fn region(&self) -> Region;
+
+    fn relative_to(&self, other: impl Regional) -> Region {
+        let this = other.region();
+        self.region().translate(this.top_left.to_vec())
+    }
+}
+
+impl Regional for Region {
+    fn region(&self) -> Region {
+        *self
     }
 }

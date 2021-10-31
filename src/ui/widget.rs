@@ -19,7 +19,7 @@ use std::marker::PhantomData;
 
 #[derive(Debug)]
 pub struct Handlers<M> {
-    handlers: Vec<(BoundingBox, M)>,
+    handlers: Vec<(Region, M)>,
 }
 
 impl<M> Handlers<M> {
@@ -31,12 +31,12 @@ impl<M> Handlers<M> {
         self.handlers.push((frame.bounds, message));
     }
 
-    pub fn push_relative(&mut self, frame: &Frame, bounds: BoundingBox, message: M) {
+    pub fn push_relative(&mut self, frame: &Frame, bounds: Region, message: M) {
         self.handlers
             .push((bounds.translate(frame.bounds.top_left.to_vec()), message));
     }
 
-    pub fn query(self, point: Point2<i32>) -> impl Iterator<Item = (BoundingBox, M)> {
+    pub fn query(self, point: Point2<i32>) -> impl Iterator<Item = (Region, M)> {
         // Handlers get added "outside in" - so to get the nice "bubbling" callback order
         // we iterate in reverse.
         self.handlers

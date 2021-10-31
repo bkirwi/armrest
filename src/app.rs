@@ -1,4 +1,4 @@
-use crate::geom::BoundingBox;
+use crate::geom::Region;
 use crate::gesture;
 use crate::gesture::{Gesture, Tool};
 use crate::ui::{Action, Handlers, Screen, Widget};
@@ -73,7 +73,7 @@ impl<M> App<M> {
             let action = match gestures.on_event(event) {
                 Some(Gesture::Ink(Tool::Pen)) => {
                     let ink = gestures.take_ink();
-                    let bounds = BoundingBox::new(
+                    let bounds = Region::new(
                         Point2::new(ink.x_range.min as i32, ink.y_range.min as i32),
                         Point2::new(ink.x_range.max.ceil() as i32, ink.y_range.max.ceil() as i32),
                     );

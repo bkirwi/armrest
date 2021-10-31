@@ -1,4 +1,4 @@
-use crate::geom::{BoundingBox, Side};
+use crate::geom::{Region, Side};
 use crate::ink::Ink;
 use libremarkable::cgmath::{EuclideanSpace, Point2, Vector2};
 use libremarkable::framebuffer::common::{
@@ -79,7 +79,7 @@ impl Default for DrawTree {
 }
 
 impl DrawTree {
-    pub fn invalidate(&mut self, mut damaged: BoundingBox) {
+    pub fn invalidate(&mut self, mut damaged: Region) {
         for (side, value, child) in &mut self.children {
             if let Some(area) = damaged.split(*side, *value) {
                 child.invalidate(area);
@@ -99,7 +99,7 @@ impl DrawTree {
 pub struct Screen {
     fb: Framebuffer<'static>,
     size: Vector2<i32>,
-    dirty: Option<BoundingBox>,
+    dirty: Option<Region>,
     node: DrawTree,
 }
 
@@ -135,7 +135,7 @@ impl Screen {
         quick_refresh(&mut self.fb, rect);
     }
 
-    pub fn invalidate(&mut self, bounds: BoundingBox) {
+    pub fn invalidate(&mut self, bounds: Region) {
         self.node.invalidate(bounds);
     }
 
@@ -143,7 +143,7 @@ impl Screen {
         Frame {
             fb: &mut self.fb,
             dirty: &mut self.dirty,
-            bounds: BoundingBox::new(Point2::origin(), Point2::origin() + self.size),
+            bounds: Region::new(Point2::origin(), Point2::origin() + self.size),
             node: &mut self.node,
             index: 0,
             content: 0,
@@ -158,7 +158,7 @@ impl<'a> Canvas<'a> {
         self.0.fb
     }
 
-    pub fn bounds(&self) -> BoundingBox {
+    pub fn bounds(&self) -> Region {
         self.0.bounds
     }
 
@@ -179,7 +179,7 @@ impl<'a> Canvas<'a> {
     }
 
     pub(crate) fn write(&mut self, x: i32, y: i32, color: u8) {
-        let BoundingBox {
+        let Region {
             top_left,
             bottom_right,
         } = self.0.bounds;
@@ -193,8 +193,8 @@ impl<'a> Canvas<'a> {
 
 pub struct Frame<'a> {
     fb: &'a mut Framebuffer<'static>,
-    dirty: &'a mut Option<BoundingBox>,
-    pub(crate) bounds: BoundingBox, // TODO: trait for this
+    dirty: &'a mut Option<Region>,
+    pub(crate) bounds: Region,
     node: &'a mut DrawTree,
     index: usize,
     content: ContentHash,

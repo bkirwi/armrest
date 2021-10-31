@@ -1,4 +1,4 @@
-use crate::geom::BoundingBox;
+use crate::geom::Region;
 use crate::ui::{Frame, Handlers, Void, Widget};
 use itertools::{Itertools, Position};
 use libremarkable::cgmath::{Point2, Vector2};
@@ -119,7 +119,7 @@ impl<M: Clone> Widget for Text<M> {
         for (range, message) in &self.on_input {
             handlers.push_relative(
                 &frame,
-                BoundingBox::new(
+                Region::new(
                     Point2::new(range.start, 0),
                     Point2::new(range.end, self.size.y),
                 ),

@@ -1,4 +1,4 @@
-use crate::geom::BoundingBox;
+use crate::geom::Region;
 use libremarkable::cgmath::{InnerSpace, MetricSpace, Point2, Point3, Vector2, Vector3};
 use std::collections::BTreeSet;
 use std::fmt;
@@ -82,8 +82,8 @@ impl Ink {
         }
     }
 
-    pub fn bounds(&self) -> BoundingBox {
-        BoundingBox::new(
+    pub fn bounds(&self) -> Region {
+        Region::new(
             Point2::new(self.x_range.min as i32, self.y_range.min as i32),
             Point2::new(
                 self.x_range.max.ceil() as i32,
