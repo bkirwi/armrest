@@ -49,6 +49,22 @@ pub fn quick_refresh(fb: &mut Framebuffer, rect: mxcfb_rect) {
     );
 }
 
+pub fn draw_ink(fb: &mut Framebuffer, origin: Point2<i32>, ink: &Ink) {
+    let offset = origin - Point2::origin();
+    for stroke in ink.strokes() {
+        let mut last = &stroke[0];
+        for point in &stroke[..] {
+            fb.draw_line(
+                Point2::new(last.x, last.y).map(|c| c as i32) + offset,
+                Point2::new(point.x, point.y).map(|c| c as i32) + offset,
+                3,
+                color::BLACK,
+            );
+            last = point;
+        }
+    }
+}
+
 /// A has representing the contents of a particular area of the screen.
 /// Despite this being a relatively small hash, the risk of collisions should
 /// be low... we only compare the before and after values for a particular
@@ -67,6 +83,8 @@ pub struct DrawTree {
     children: Vec<(Side, i32, DrawTree)>,
     // the content hash of whatever's left.
     content: ContentHash,
+    // If this node in the tree has an associated annotation, the region it covers and the length
+    annotation: Option<(Region, usize)>,
 }
 
 impl Default for DrawTree {
@@ -74,6 +92,7 @@ impl Default for DrawTree {
         DrawTree {
             children: vec![],
             content: INVALID_CONTENT,
+            annotation: None,
         }
     }
 }
@@ -99,7 +118,10 @@ impl DrawTree {
 pub struct Screen {
     fb: Framebuffer<'static>,
     size: Vector2<i32>,
-    dirty: Option<Region>,
+    pub(crate) invalid_annotation: Option<Region>, // A previous annotation has been removed; the content layer needs redrawing.
+    dirty: Option<Region>,                         // The content layer has been redrawn.
+    pub(crate) dirty_annotation: Option<Region>,   // The annotations have been redrawn.
+    must_redraw_annotation: Option<Region>,        // UGH
     node: DrawTree,
 }
 
@@ -108,7 +130,10 @@ impl Screen {
         Screen {
             fb,
             size: Vector2::new(DISPLAYWIDTH as i32, DISPLAYHEIGHT as i32),
+            invalid_annotation: None,
             dirty: None,
+            dirty_annotation: None,
+            must_redraw_annotation: None,
             node: Default::default(),
         }
     }
@@ -120,6 +145,7 @@ impl Screen {
     pub fn clear(&mut self) {
         self.fb.clear();
         self.dirty = None;
+        self.dirty_annotation = None;
         self.node = DrawTree::default();
         full_refresh(&mut self.fb);
     }
@@ -143,10 +169,12 @@ impl Screen {
         Frame {
             fb: &mut self.fb,
             dirty: &mut self.dirty,
+            invalid_annotation: &mut self.invalid_annotation,
             bounds: Region::new(Point2::origin(), Point2::origin() + self.size),
             node: &mut self.node,
             index: 0,
             content: 0,
+            annotations: vec![],
         }
     }
 }
@@ -162,23 +190,11 @@ impl<'a> Canvas<'a> {
         self.0.bounds
     }
 
-    pub(crate) fn ink(&mut self, ink: &Ink) {
-        let offset = self.0.bounds.top_left - Point2::origin();
-        for stroke in ink.strokes() {
-            let mut last = &stroke[0];
-            for point in &stroke[..] {
-                self.0.fb.draw_line(
-                    Point2::new(last.x, last.y).map(|c| c as i32) + offset,
-                    Point2::new(point.x, point.y).map(|c| c as i32) + offset,
-                    3,
-                    color::BLACK,
-                );
-                last = point;
-            }
-        }
+    pub fn ink(&mut self, ink: &Ink) {
+        draw_ink(self.0.fb, self.0.bounds.top_left, ink);
     }
 
-    pub(crate) fn write(&mut self, x: i32, y: i32, color: u8) {
+    pub fn write(&mut self, x: i32, y: i32, color: u8) {
         let Region {
             top_left,
             bottom_right,
@@ -194,16 +210,68 @@ impl<'a> Canvas<'a> {
 pub struct Frame<'a> {
     fb: &'a mut Framebuffer<'static>,
     dirty: &'a mut Option<Region>,
+    invalid_annotation: &'a mut Option<Region>,
+    // dirty_annotation: &'a mut Option<Region>,
+    // must_redraw_annotation: Option<Region>,
     pub(crate) bounds: Region,
     node: &'a mut DrawTree,
     index: usize,
     content: ContentHash,
+    annotations: Vec<(Point2<i32>, &'a Ink)>,
 }
 
 impl Drop for Frame<'_> {
     fn drop(&mut self) {
         self.truncate();
+
+        let mut new_region = None;
+        let mut new_len = 0;
+        for (p, a) in &self.annotations {
+            let region = a.bounds().translate(p.to_vec());
+            new_region = Some(new_region.map_or(region, |b: Region| b.union(region)));
+            new_len += a.len();
+        }
+
+        match (self.node.annotation, new_region) {
+            (Some((old_region, old_len)), Some(new_region)) => {
+                // TODO: do this only when we detect that it's necessary! (ie. the underlying region is dirty.)
+                for (p, a) in &self.annotations {
+                    draw_ink(self.fb, *p, a);
+                }
+                if old_region == new_region && old_len == new_len {
+                    // Nothing to do!
+                } else {
+                    // Mark the old region as removed, and the new one as added
+                    *self.invalid_annotation = Some(
+                        self.invalid_annotation
+                            .map_or(old_region, |b| b.union(old_region)),
+                    );
+                    self.node.annotation = Some((new_region, new_len));
+                }
+            }
+            (Some((old_region, _)), None) => {
+                *self.invalid_annotation = Some(
+                    self.invalid_annotation
+                        .map_or(old_region, |b| b.union(old_region)),
+                );
+                self.node.annotation = None;
+            }
+            (None, Some(new_region)) => {
+                *self.dirty = Some(self.dirty.map_or(new_region, |d| d.union(new_region)));
+                for (p, a) in &self.annotations {
+                    draw_ink(self.fb, *p, a);
+                }
+                self.node.annotation = Some((new_region, new_len));
+            }
+            (None, None) => {
+                // Nothing to do: no annotations before or after.
+            }
+        }
     }
+}
+
+fn merge_region(acc: &mut Option<Region>, other: Region) {
+    *acc = Some(acc.map_or(other, |r| r.union(other)))
 }
 
 impl<'a> Frame<'a> {
@@ -218,7 +286,28 @@ impl<'a> Frame<'a> {
     fn truncate(&mut self) {
         if self.index != self.node.children.len() || self.content != self.node.content {
             // Clear the rest of the node and blank the remaining area.
-            self.node.children.truncate(self.index);
+
+            fn all_annotations(tree: DrawTree) -> Option<Region> {
+                let mut result = None;
+
+                if let Some((r, _)) = tree.annotation {
+                    merge_region(&mut result, r);
+                }
+
+                for (_, _, child) in tree.children {
+                    if let Some(r) = all_annotations(child) {
+                        merge_region(&mut result, r);
+                    }
+                }
+
+                result
+            }
+            for (_, _, child) in self.node.children.drain(self.index..) {
+                if let Some(r) = all_annotations(child) {
+                    merge_region(self.invalid_annotation, r);
+                }
+            }
+
             self.fb.fill_rect(
                 self.bounds.top_left,
                 self.bounds.size().map(|c| c as u32),
@@ -227,6 +316,18 @@ impl<'a> Frame<'a> {
             self.mark_dirty();
             self.node.content = 0;
             self.content = 0;
+
+            if let Some((region, _)) = self.node.annotation {
+                *self.invalid_annotation =
+                    Some(self.invalid_annotation.map_or(region, |d| d.union(region)));
+                self.node.annotation = None;
+            }
+        }
+    }
+
+    pub fn push_annotation(&mut self, ink: &'a Ink) {
+        if ink.len() != 0 {
+            self.annotations.push((self.bounds.top_left, ink));
         }
     }
 
@@ -281,10 +382,12 @@ impl<'a> Frame<'a> {
         Frame {
             fb: self.fb,
             dirty: self.dirty,
+            invalid_annotation: self.invalid_annotation,
             bounds: split_bounds,
             node: split_node,
             index: 0,
             content: 0,
+            annotations: vec![],
         }
     }
 

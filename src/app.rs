@@ -3,11 +3,13 @@ use crate::gesture;
 use crate::gesture::{Gesture, Tool};
 use crate::ui::{Action, Handlers, Screen, Widget};
 use libremarkable::cgmath::{EuclideanSpace, Point2, Vector2};
+use libremarkable::framebuffer::common::{DISPLAYHEIGHT, DISPLAYWIDTH};
 use libremarkable::framebuffer::core::Framebuffer;
 use libremarkable::framebuffer::FramebufferBase;
 use libremarkable::input::ev::EvDevContext;
 use libremarkable::input::{InputDevice, InputEvent};
 use std::sync::mpsc;
+use std::time::Instant;
 
 pub struct Sender<M> {
     wakeup: mpsc::Sender<InputEvent>,
@@ -41,7 +43,7 @@ impl<M> App<M> {
     }
 
     pub fn size(&self) -> Vector2<i32> {
-        unimplemented!()
+        Vector2::new(DISPLAYWIDTH as i32, DISPLAYHEIGHT as i32)
     }
 
     pub fn sender(&self) -> Sender<M> {
@@ -69,7 +71,11 @@ impl<M> App<M> {
         EvDevContext::new(InputDevice::Wacom, self.input_tx.clone()).start();
         let mut gestures = gesture::State::new();
 
+        let mut should_update = false;
+
         while let Ok(event) = self.input_rx.recv() {
+            let start_time = Instant::now();
+
             let action = match gestures.on_event(event) {
                 Some(Gesture::Ink(Tool::Pen)) => {
                     let ink = gestures.take_ink();
@@ -88,6 +94,8 @@ impl<M> App<M> {
                 _ => None,
             };
 
+            let gesture_time = Instant::now();
+
             if let Some(a) = action {
                 for (b, m) in handlers.query(a.center()) {
                     let translated = a.clone().translate(Point2::origin() - b.top_left);
@@ -95,20 +103,46 @@ impl<M> App<M> {
                         return e;
                     }
                 }
+                should_update = true;
                 handlers = Handlers::new();
-                widget.render_placed(&mut handlers, screen.root(), 0.5, 0.5);
             }
 
             // We don't want to change anything if the user is currently interacting with the screen.
             if gestures.current_ink().len() == 0 {
                 if let Ok(m) = self.message_rx.try_recv() {
                     on_input(&mut widget, Action::Unknown, m);
-                    handlers = Handlers::new();
-                    widget.render_placed(&mut handlers, screen.root(), 0.5, 0.5);
+                    should_update = true;
                 }
             }
 
-            screen.refresh_changes();
+            let handler_time = Instant::now();
+
+            if should_update {
+                handlers = Handlers::new();
+                widget.render_placed(&mut handlers, screen.root(), 0.5, 0.5);
+                let render_one_time = Instant::now();
+                if let Some(region) = screen.invalid_annotation.clone() {
+                    screen.invalidate(region);
+                    screen.invalid_annotation = None;
+                }
+                handlers = Handlers::new();
+                widget.render_placed(&mut handlers, screen.root(), 0.5, 0.5);
+                handlers = Handlers::new();
+                widget.render_placed(&mut handlers, screen.root(), 0.5, 0.5);
+                let render_all_time = Instant::now();
+                screen.refresh_changes();
+                should_update = false;
+
+                let draw_time = Instant::now();
+                eprintln!(
+                    "render-loop gesture={:?} update={:?} render_first={:?} render_full={:?} refresh={:?}",
+                    gesture_time - start_time,
+                    handler_time - gesture_time,
+                    render_one_time - handler_time,
+                    render_all_time - render_one_time,
+                    draw_time - render_all_time,
+                );
+            }
         }
 
         panic!("Unexpected end of input!")

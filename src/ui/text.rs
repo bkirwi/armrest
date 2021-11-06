@@ -190,7 +190,7 @@ impl<'a, M> TextBuilder<'a, M> {
 
     pub fn message(mut self, message: M) -> Self {
         if self.current_message.is_some() {
-            todo!("Close the current message");
+            self = self.no_message();
         }
 
         self.current_message = Some((message, None));
@@ -201,7 +201,7 @@ impl<'a, M> TextBuilder<'a, M> {
     pub fn no_message(mut self) -> Self {
         if let Some((message, Some((start, start_offset)))) = self.current_message.take() {
             assert!(
-                self.words.len() > 1,
+                !self.words.is_empty(),
                 "The word list must not be empty at this point!"
             );
             let end = self.words.len() - 1;
@@ -212,7 +212,8 @@ impl<'a, M> TextBuilder<'a, M> {
         self
     }
 
-    pub fn into_text(self) -> Text<M> {
+    pub fn into_text(mut self) -> Text<M> {
+        self = self.no_message();
         // Iterate over the words, collecting all the glyphs and adjusting them
         // to their final position.
         let mut word_start = self.indent;

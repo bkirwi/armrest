@@ -80,7 +80,7 @@ impl Action {
 pub trait Widget {
     type Message;
     fn size(&self) -> Vector2<i32>;
-    fn render(&self, handlers: &mut Handlers<Self::Message>, frame: Frame);
+    fn render<'a>(&'a self, handlers: &'a mut Handlers<Self::Message>, frame: Frame<'a>);
 
     fn render_placed(
         &self,
@@ -283,8 +283,8 @@ pub struct InputArea<M = Void> {
     on_ink: Option<M>,
 }
 
-impl InputArea {
-    pub fn new(size: Vector2<i32>) -> InputArea {
+impl<M> InputArea<M> {
+    pub fn new(size: Vector2<i32>) -> InputArea<M> {
         InputArea {
             size,
             ink: Ink::new(),
@@ -294,7 +294,7 @@ impl InputArea {
 }
 
 impl<A> InputArea<A> {
-    pub fn on_ink<B>(self, message: Option<B>) -> InputArea<B> {
+    pub fn on_ink(self, message: Option<A>) -> InputArea<A> {
         InputArea {
             size: self.size,
             ink: self.ink,
@@ -310,9 +310,13 @@ impl<M: Clone> Widget for InputArea<M> {
         self.size
     }
 
-    fn render(&self, handlers: &mut Handlers<Self::Message>, sink: Frame) {
+    fn render<'a>(&'a self, handlers: &'a mut Handlers<Self::Message>, mut sink: Frame<'a>) {
         if let Some(m) = self.on_ink.clone() {
             handlers.push(&sink, m);
+        }
+
+        if !self.ink.points.is_empty() {
+            sink.push_annotation(&self.ink);
         }
 
         let mut hasher = DefaultHasher::new();

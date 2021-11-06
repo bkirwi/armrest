@@ -28,7 +28,12 @@ pub struct Region {
 
 impl Region {
     pub fn new(top_left: Point2<i32>, bottom_right: Point2<i32>) -> Region {
-        assert!(top_left.x <= bottom_right.x && top_left.y <= bottom_right.y);
+        assert!(
+            top_left.x <= bottom_right.x && top_left.y <= bottom_right.y,
+            "Expected: {:?} <= {:?}",
+            top_left,
+            bottom_right
+        );
         Region {
             top_left,
             bottom_right,
