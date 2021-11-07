@@ -10,11 +10,13 @@ use armrest::ui::{Action, Frame, Handlers, InputArea, Side, Text, Widget};
 use libremarkable::cgmath::Point2;
 use libremarkable::framebuffer::common::{color, DISPLAYHEIGHT, DISPLAYWIDTH};
 use libremarkable::framebuffer::FramebufferDraw;
+use std::borrow::Borrow;
 
 #[derive(Clone, Debug)]
 enum Msg {
     HeaderInk { ink: Ink },
     TodoInk { id: usize, checkbox: bool, ink: Ink },
+    Uncheck { id: usize },
     Sort,
     Clear,
 }
@@ -60,6 +62,7 @@ impl Widget for Entry {
             checkbox: true,
             ink,
         });
+        handlers.on_tap(&check_area, Msg::Uncheck { id });
         check_area.push_annotation(&self.checkbox);
         if let Some(mut canvas) = check_area.canvas(23456 + if self.checked { 1 } else { 0 }) {
             let region = canvas.bounds();
@@ -190,6 +193,12 @@ fn main() {
             }
             Msg::Clear => {
                 widget.entries.retain(|e| !e.checked);
+            }
+            Msg::Uncheck { id } => {
+                if let Some(entry) = widget.entries.iter_mut().find(|e| e.id == id) {
+                    entry.checked = false;
+                    entry.checkbox.clear();
+                }
             }
         }
 

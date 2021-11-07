@@ -23,48 +23,53 @@ enum Handler<M> {
 }
 
 pub struct Handlers<M> {
-    handlers: Vec<(Region, Handler<M>)>,
+    input: Option<Action>,
+    messages: Vec<M>,
 }
 
 impl<M> Handlers<M> {
     pub fn new() -> Handlers<M> {
-        Handlers { handlers: vec![] }
+        Handlers {
+            input: None,
+            messages: vec![],
+        }
+    }
+
+    pub fn from_action(action: Action) -> Handlers<M> {
+        Handlers {
+            input: Some(action),
+            messages: vec![],
+        }
     }
 
     pub fn on_tap(&mut self, frame: &impl Regional, message: M) {
-        self.handlers
-            .push((frame.region(), Handler::Tap { message }));
+        if let Some(a) = &self.input {
+            let center = a.center();
+            if let Action::Touch(t) = a {
+                if t.length() < 20.0 && frame.region().contains(center) {
+                    self.messages.push(message);
+                }
+            }
+        }
     }
 
-    pub fn on_ink(&mut self, frame: &impl Regional, message_fn: impl Fn(Ink) -> M + 'static) {
-        self.handlers.push((
-            frame.region(),
-            Handler::Ink {
-                message_fn: Box::new(message_fn),
-            },
-        ));
+    pub fn on_ink(&mut self, frame: &impl Regional, message_fn: impl Fn(Ink) -> M) {
+        if let Some(a) = &self.input {
+            let center = a.center();
+            if let Action::Ink(i) = a {
+                let region = frame.region();
+                if frame.region().contains(center) {
+                    let ink = i
+                        .clone()
+                        .translate(-region.top_left.to_vec().map(|c| c as f32));
+                    self.messages.push(message_fn(ink));
+                }
+            }
+        }
     }
 
-    // pub fn push_relative(&mut self, frame: &Frame, bounds: Region, message: M) {
-    //     self.handlers
-    //         .push((bounds.translate(frame.bounds.top_left.to_vec()), message));
-    // }
-
-    pub fn query(self, action: Action) -> impl Iterator<Item = M> {
-        let point = action.center();
-        // Handlers get added "outside in" - so to get the nice "bubbling" callback order
-        // we iterate in reverse.
-        self.handlers
-            .into_iter()
-            .rev()
-            .filter(move |(b, _)| b.contains(point))
-            .filter_map(move |(b, h)| match h {
-                Handler::Tap { message } => Some(message),
-                Handler::Ink { message_fn } => match &action {
-                    Action::Ink(ink) => Some(message_fn(ink.clone())),
-                    _ => None,
-                },
-            })
+    pub fn query(self) -> impl Iterator<Item = M> {
+        self.messages.into_iter().rev()
     }
 }
 
@@ -132,17 +137,17 @@ pub trait Widget {
         self.render_placed(handlers, widget_area, positioning, positioning);
     }
 
-    fn map<F: Fn(Self::Message) -> A, A>(&self, map_fn: F) -> Mapped<&Self, F>
+    fn map<F: Fn(Self::Message) -> A, A>(self, map_fn: F) -> Mapped<Self, F>
     where
         Self: Sized,
     {
         Mapped {
-            nested: &self,
+            nested: self,
             map_fn,
         }
     }
 
-    fn void<A>(&self) -> Mapped<&Self, fn(Self::Message) -> A>
+    fn void<A>(self) -> Mapped<Self, fn(Self::Message) -> A>
     where
         Self: Sized,
         Self::Message: IsVoid,
@@ -150,12 +155,12 @@ pub trait Widget {
         self.map(IsVoid::into_any)
     }
 
-    fn discard<A>(&self) -> Discard<&Self, A>
+    fn discard<A>(self) -> Discard<Self, A>
     where
         Self: Sized,
     {
         Discard {
-            nested: &self,
+            nested: self,
             _phantom: Default::default(),
         }
     }
@@ -181,8 +186,7 @@ pub struct Mapped<T, F> {
 impl<T, A, F> Widget for Mapped<T, F>
 where
     T: Widget,
-    F: Fn(T::Message) -> A + Clone + 'static,
-    T::Message: 'static,
+    F: Fn(T::Message) -> A,
 {
     type Message = A;
 
@@ -191,23 +195,16 @@ where
     }
 
     fn render(&self, handlers: &mut Handlers<Self::Message>, frame: Frame) {
-        let mut nested_handlers: Handlers<T::Message> = Handlers::new();
+        let mut nested_handlers: Handlers<T::Message> = Handlers {
+            input: handlers.input.take(),
+            messages: vec![],
+        };
         self.nested.render(&mut nested_handlers, frame);
-        for (bb, a) in nested_handlers.handlers {
-            let updated = match a {
-                Handler::Tap { message } => Handler::Tap {
-                    message: (self.map_fn)(message),
-                },
-                Handler::Ink { message_fn } => Handler::Ink {
-                    message_fn: {
-                        let map_fn = self.map_fn.clone();
-                        Box::new(move |i| map_fn(message_fn(i)))
-                    },
-                },
-            };
-
-            handlers.handlers.push((bb, updated));
+        for m in nested_handlers.messages {
+            let a = (self.map_fn)(m);
+            handlers.messages.push(a)
         }
+        handlers.input = nested_handlers.input.take();
     }
 }
 

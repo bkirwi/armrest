@@ -97,13 +97,15 @@ impl<M> App<M> {
             let gesture_time = Instant::now();
 
             if let Some(a) = action {
-                for m in handlers.query(a) {
+                handlers = Handlers::from_action(a);
+                widget.render(&mut handlers, screen.root());
+
+                for m in handlers.query() {
                     if let Err(e) = on_input(&mut widget, m) {
                         return e;
                     }
                 }
                 should_update = true;
-                handlers = Handlers::new();
             }
 
             // We don't want to change anything if the user is currently interacting with the screen.
@@ -118,16 +120,16 @@ impl<M> App<M> {
 
             if should_update {
                 handlers = Handlers::new();
-                widget.render_placed(&mut handlers, screen.root(), 0.5, 0.5);
+                widget.render(&mut handlers, screen.root());
                 let render_one_time = Instant::now();
                 if let Some(region) = screen.invalid_annotation.clone() {
                     screen.invalidate(region);
                     screen.invalid_annotation = None;
                 }
                 handlers = Handlers::new();
-                widget.render_placed(&mut handlers, screen.root(), 0.5, 0.5);
+                widget.render(&mut handlers, screen.root());
                 handlers = Handlers::new();
-                widget.render_placed(&mut handlers, screen.root(), 0.5, 0.5);
+                widget.render(&mut handlers, screen.root());
                 let render_all_time = Instant::now();
                 screen.refresh_changes();
                 should_update = false;
