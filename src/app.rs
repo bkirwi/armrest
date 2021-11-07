@@ -2,7 +2,7 @@ use crate::geom::Region;
 use crate::gesture;
 use crate::gesture::{Gesture, Tool};
 use crate::ui::{Action, Handlers, Screen, Widget};
-use libremarkable::cgmath::{EuclideanSpace, Point2, Vector2};
+use libremarkable::cgmath::{Point2, Vector2};
 use libremarkable::framebuffer::common::{DISPLAYHEIGHT, DISPLAYWIDTH};
 use libremarkable::framebuffer::core::Framebuffer;
 use libremarkable::framebuffer::FramebufferBase;

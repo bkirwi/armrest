@@ -5,7 +5,7 @@ use rusttype::Font;
 
 use armrest::app;
 use armrest::ui;
-use armrest::ui::{Text, Widget};
+use armrest::ui::Text;
 
 fn main() {
     let font: Font<'static> = {

@@ -5,12 +5,11 @@ use rusttype::Font;
 
 use armrest::app;
 use armrest::ink::Ink;
-use armrest::ui;
-use armrest::ui::{Action, Frame, Handlers, InputArea, Side, Text, Widget};
+
+use armrest::ui::{Frame, Handlers, Side, Text, Widget};
 use libremarkable::cgmath::Point2;
 use libremarkable::framebuffer::common::{color, DISPLAYHEIGHT, DISPLAYWIDTH};
 use libremarkable::framebuffer::FramebufferDraw;
-use std::borrow::Borrow;
 
 #[derive(Clone, Debug)]
 enum Msg {
@@ -165,7 +164,7 @@ fn main() {
         })
     }
 
-    let mut widget = TodoApp {
+    let widget = TodoApp {
         header: Ink::new(),
         next_entry_id: 15,
         sort_button,

@@ -1,6 +1,6 @@
 use crate::geom::Region;
 use crate::ui::{Frame, Handlers, Regional, Void, Widget};
-use itertools::{Itertools, Position};
+use itertools::Itertools;
 use libremarkable::cgmath::{Point2, Vector2};
 use rusttype::{point, Font, PositionedGlyph, Scale};
 use std::collections::hash_map::DefaultHasher;
@@ -364,15 +364,14 @@ impl<'a, M> TextBuilder<'a, M> {
                 .unwrap_or(self.on_input.len());
 
             let mut current_input = self.on_input.split_off(split_index);
-            for (s, so, e, eo, m) in &mut current_input {
+            for (s, _, e, _, _) in &mut current_input {
                 *s -= index;
                 *e -= index;
             }
 
             // It's possible that the first remaining range extends into the current as well.
             // If so, split it in half and keep the first half.
-            if let Some((start, start_offset, end, end_offset, message)) = self.on_input.first_mut()
-            {
+            if let Some((start, start_offset, _, _, message)) = self.on_input.first_mut() {
                 if *start < end_index {
                     current_input.push((
                         *start - index,

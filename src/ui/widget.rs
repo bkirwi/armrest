@@ -14,7 +14,7 @@ use std::ops::{Deref, DerefMut};
 
 use crate::ui::{ContentHash, Frame};
 use libremarkable::framebuffer::common::color;
-use libremarkable::image::{GrayImage, RgbImage};
+use libremarkable::image::GrayImage;
 use std::marker::PhantomData;
 
 enum Handler<M> {
@@ -345,20 +345,15 @@ impl<M: Clone> Widget for InputArea<M> {
     }
 
     fn render<'a>(&'a self, handlers: &'a mut Handlers<Self::Message>, mut sink: Frame<'a>) {
-        if let Some(m) = self.on_ink.clone() {
-            // handlers.push(&sink, m);
+        if let Some(_m) = self.on_ink.clone() {
+            handlers.on_ink(&sink, m);
         }
 
         if !self.ink.points.is_empty() {
             sink.push_annotation(&self.ink);
         }
 
-        let mut hasher = DefaultHasher::new();
-        // TODO: better than this?
-        self.ink.len().hash(&mut hasher);
-        let hash = hasher.finish();
-
-        if let Some(mut canvas) = sink.canvas(hash) {
+        if let Some(mut canvas) = sink.canvas(283746) {
             let y = self.size.y * 2 / 3;
             for x in 0..(self.size.x) {
                 canvas.write(x, y, u8::MAX);

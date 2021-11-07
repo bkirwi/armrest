@@ -1,5 +1,5 @@
 use crate::ink::Ink;
-use libremarkable::cgmath::{Deg, EuclideanSpace, InnerSpace, MetricSpace, Point2, Vector2};
+use libremarkable::cgmath::{EuclideanSpace, MetricSpace, Point2, Vector2};
 
 use libremarkable::input::multitouch::MultitouchEvent;
 use libremarkable::input::wacom::{WacomEvent, WacomPen};
