@@ -17,9 +17,13 @@ use libremarkable::framebuffer::common::color;
 use libremarkable::image::{GrayImage, RgbImage};
 use std::marker::PhantomData;
 
-#[derive(Debug)]
+enum Handler<M> {
+    Tap { message: M },
+    Ink { message_fn: Box<dyn Fn(Ink) -> M> },
+}
+
 pub struct Handlers<M> {
-    handlers: Vec<(Region, M)>,
+    handlers: Vec<(Region, Handler<M>)>,
 }
 
 impl<M> Handlers<M> {
@@ -27,23 +31,40 @@ impl<M> Handlers<M> {
         Handlers { handlers: vec![] }
     }
 
-    pub fn push(&mut self, frame: &Frame, message: M) {
-        self.handlers.push((frame.bounds, message));
-    }
-
-    pub fn push_relative(&mut self, frame: &Frame, bounds: Region, message: M) {
+    pub fn on_tap(&mut self, frame: &impl Regional, message: M) {
         self.handlers
-            .push((bounds.translate(frame.bounds.top_left.to_vec()), message));
+            .push((frame.region(), Handler::Tap { message }));
     }
 
-    pub fn query(self, point: Point2<i32>) -> impl Iterator<Item = (Region, M)> {
+    pub fn on_ink(&mut self, frame: &impl Regional, message_fn: impl Fn(Ink) -> M + 'static) {
+        self.handlers.push((
+            frame.region(),
+            Handler::Ink {
+                message_fn: Box::new(message_fn),
+            },
+        ));
+    }
+
+    // pub fn push_relative(&mut self, frame: &Frame, bounds: Region, message: M) {
+    //     self.handlers
+    //         .push((bounds.translate(frame.bounds.top_left.to_vec()), message));
+    // }
+
+    pub fn query(self, action: Action) -> impl Iterator<Item = M> {
+        let point = action.center();
         // Handlers get added "outside in" - so to get the nice "bubbling" callback order
         // we iterate in reverse.
         self.handlers
             .into_iter()
             .rev()
             .filter(move |(b, _)| b.contains(point))
-            .map(|(b, m)| (b, m))
+            .filter_map(move |(b, h)| match h {
+                Handler::Tap { message } => Some(message),
+                Handler::Ink { message_fn } => match &action {
+                    Action::Ink(ink) => Some(message_fn(ink.clone())),
+                    _ => None,
+                },
+            })
     }
 }
 
@@ -157,7 +178,12 @@ pub struct Mapped<T, F> {
     map_fn: F,
 }
 
-impl<T: Widget, A, F: Fn(T::Message) -> A> Widget for Mapped<T, F> {
+impl<T, A, F> Widget for Mapped<T, F>
+where
+    T: Widget,
+    F: Fn(T::Message) -> A + Clone + 'static,
+    T::Message: 'static,
+{
     type Message = A;
 
     fn size(&self) -> Vector2<i32> {
@@ -166,10 +192,21 @@ impl<T: Widget, A, F: Fn(T::Message) -> A> Widget for Mapped<T, F> {
 
     fn render(&self, handlers: &mut Handlers<Self::Message>, frame: Frame) {
         let mut nested_handlers: Handlers<T::Message> = Handlers::new();
-        let map_fn = &self.map_fn;
         self.nested.render(&mut nested_handlers, frame);
         for (bb, a) in nested_handlers.handlers {
-            handlers.handlers.push((bb, map_fn(a)));
+            let updated = match a {
+                Handler::Tap { message } => Handler::Tap {
+                    message: (self.map_fn)(message),
+                },
+                Handler::Ink { message_fn } => Handler::Ink {
+                    message_fn: {
+                        let map_fn = self.map_fn.clone();
+                        Box::new(move |i| map_fn(message_fn(i)))
+                    },
+                },
+            };
+
+            handlers.handlers.push((bb, updated));
         }
     }
 }
@@ -312,7 +349,7 @@ impl<M: Clone> Widget for InputArea<M> {
 
     fn render<'a>(&'a self, handlers: &'a mut Handlers<Self::Message>, mut sink: Frame<'a>) {
         if let Some(m) = self.on_ink.clone() {
-            handlers.push(&sink, m);
+            // handlers.push(&sink, m);
         }
 
         if !self.ink.points.is_empty() {

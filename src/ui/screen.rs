@@ -1,4 +1,4 @@
-use crate::geom::{Region, Side};
+use crate::geom::{Region, Regional, Side};
 use crate::ink::Ink;
 use libremarkable::cgmath::{EuclideanSpace, Point2, Vector2};
 use libremarkable::framebuffer::common::{
@@ -267,6 +267,12 @@ impl Drop for Frame<'_> {
                 // Nothing to do: no annotations before or after.
             }
         }
+    }
+}
+
+impl Regional for Frame<'_> {
+    fn region(&self) -> Region {
+        self.bounds
     }
 }
 

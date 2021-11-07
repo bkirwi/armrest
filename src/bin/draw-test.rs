@@ -36,7 +36,7 @@ fn main() {
 
     let mut app = app::App::new();
 
-    app.run(stack, |_stack, _action, message| {
+    app.run(stack, |_stack, message| {
         eprintln!("Touched: {:?}", message);
         Ok(())
     })

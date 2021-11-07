@@ -56,7 +56,7 @@ impl<M> App<M> {
     pub fn run<W: Widget<Message = M>, E>(
         &mut self,
         mut widget: W,
-        on_input: impl Fn(&mut W, Action, M) -> Result<(), E>,
+        on_input: impl Fn(&mut W, M) -> Result<(), E>,
     ) -> E {
         let mut screen = Screen::new(Framebuffer::from_path("/dev/fb0"));
         screen.clear();
@@ -97,9 +97,8 @@ impl<M> App<M> {
             let gesture_time = Instant::now();
 
             if let Some(a) = action {
-                for (b, m) in handlers.query(a.center()) {
-                    let translated = a.clone().translate(Point2::origin() - b.top_left);
-                    if let Err(e) = on_input(&mut widget, translated, m) {
+                for m in handlers.query(a) {
+                    if let Err(e) = on_input(&mut widget, m) {
                         return e;
                     }
                 }
@@ -110,7 +109,7 @@ impl<M> App<M> {
             // We don't want to change anything if the user is currently interacting with the screen.
             if gestures.current_ink().len() == 0 {
                 if let Ok(m) = self.message_rx.try_recv() {
-                    on_input(&mut widget, Action::Unknown, m);
+                    on_input(&mut widget, m);
                     should_update = true;
                 }
             }

@@ -163,7 +163,7 @@ impl Region {
 pub trait Regional {
     fn region(&self) -> Region;
 
-    fn relative_to(&self, other: impl Regional) -> Region {
+    fn relative_to(&self, other: &impl Regional) -> Region {
         let this = other.region();
         self.region().translate(this.top_left.to_vec())
     }

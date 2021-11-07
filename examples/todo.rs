@@ -13,8 +13,8 @@ use libremarkable::framebuffer::FramebufferDraw;
 
 #[derive(Clone, Debug)]
 enum Msg {
-    HeaderInk,
-    TodoInk { id: usize, checkbox: bool },
+    HeaderInk { ink: Ink },
+    TodoInk { id: usize, checkbox: bool, ink: Ink },
     Sort,
     Clear,
 }
@@ -52,14 +52,14 @@ impl Widget for Entry {
     fn render<'a>(&'a self, handlers: &'a mut Handlers<Self::Message>, mut frame: Frame<'a>) {
         let mut check_area = frame.split_off(Side::Left, 210);
 
+        let id = self.id;
+
         // Draw the checkbox area
-        handlers.push(
-            &check_area,
-            Msg::TodoInk {
-                id: self.id,
-                checkbox: true,
-            },
-        );
+        handlers.on_ink(&check_area, move |ink| Msg::TodoInk {
+            id,
+            checkbox: true,
+            ink,
+        });
         check_area.push_annotation(&self.checkbox);
         if let Some(mut canvas) = check_area.canvas(23456 + if self.checked { 1 } else { 0 }) {
             let region = canvas.bounds();
@@ -74,13 +74,11 @@ impl Widget for Entry {
         }
 
         // Draw the "main" area
-        handlers.push(
-            &frame,
-            Msg::TodoInk {
-                id: self.id,
-                checkbox: false,
-            },
-        );
+        handlers.on_ink(&frame, move |ink| Msg::TodoInk {
+            id,
+            checkbox: false,
+            ink,
+        });
         frame.push_annotation(&self.description);
         if let Some(mut canvas) = frame.canvas(5678) {
             let region = canvas.bounds();
@@ -112,7 +110,7 @@ impl Widget for TodoApp {
     fn render<'a>(&'a self, handlers: &'a mut Handlers<Self::Message>, mut frame: Frame<'a>) {
         let mut head = frame.split_off(Side::Top, 220);
         head.push_annotation(&self.header);
-        handlers.push(&head, Msg::HeaderInk);
+        handlers.on_ink(&head, |ink| Msg::HeaderInk { ink });
 
         {
             let mut menu = head.split_off(Side::Top, 200);
@@ -172,31 +170,18 @@ fn main() {
         entries,
     };
 
-    app.run(widget, |widget, action, message| {
+    app.run(widget, |widget, message| {
         match message {
-            Msg::HeaderInk => {
-                if let Action::Ink(ink) = action {
-                    widget.header.append(ink, 1.0);
-                }
+            Msg::HeaderInk { ink } => {
+                widget.header.append(ink, 1.0);
             }
-            Msg::TodoInk { id, checkbox } => {
+            Msg::TodoInk { id, checkbox, ink } => {
                 if let Some(entry) = widget.entries.iter_mut().find(|e| e.id == id) {
-                    match action {
-                        Action::Touch(touch) => {
-                            if checkbox && entry.checked {
-                                entry.checked = false;
-                                entry.checkbox.clear();
-                            }
-                        }
-                        Action::Ink(ink) => {
-                            if checkbox {
-                                entry.checkbox.append(ink, 1.0);
-                                entry.checked = true;
-                            } else {
-                                entry.description.append(ink, 1.0);
-                            }
-                        }
-                        Action::Unknown => {}
+                    if checkbox {
+                        entry.checkbox.append(ink, 1.0);
+                        entry.checked = true;
+                    } else {
+                        entry.description.append(ink, 1.0);
                     }
                 }
             }
