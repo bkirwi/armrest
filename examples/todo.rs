@@ -23,8 +23,8 @@ enum Msg {
 struct Entry {
     id: usize,
     checked: bool,
-    checkbox: Ink,
-    description: Ink,
+    check: Ink,
+    label: Ink,
 }
 
 impl Entry {
@@ -32,13 +32,13 @@ impl Entry {
         Entry {
             id,
             checked: false,
-            checkbox: Default::default(),
-            description: Default::default(),
+            check: Default::default(),
+            label: Default::default(),
         }
     }
 
     fn sort_key(&self) -> impl Ord {
-        let blank = self.description.len() == 0 && self.checkbox.len() == 0;
+        let blank = self.label.len() == 0 && self.check.len() == 0;
         (blank, self.checked)
     }
 }
@@ -62,7 +62,7 @@ impl Widget for Entry {
             ink,
         });
         handlers.on_tap(&check_area, Msg::Uncheck { id });
-        check_area.push_annotation(&self.checkbox);
+        check_area.push_annotation(&self.check);
         if let Some(mut canvas) = check_area.canvas(23456 + if self.checked { 1 } else { 0 }) {
             let region = canvas.bounds();
             let pos = region.top_left + Vector2::new(75, 20);
@@ -81,7 +81,7 @@ impl Widget for Entry {
             checkbox: false,
             ink,
         });
-        frame.push_annotation(&self.description);
+        frame.push_annotation(&self.label);
         if let Some(mut canvas) = frame.canvas(5678) {
             let region = canvas.bounds();
             canvas.framebuffer().draw_line(
@@ -159,8 +159,8 @@ fn main() {
         entries.push(Entry {
             id: i,
             checked: false,
-            checkbox: Ink::new(),
-            description: Ink::new(),
+            check: Ink::new(),
+            label: Ink::new(),
         })
     }
 
@@ -180,10 +180,10 @@ fn main() {
             Msg::TodoInk { id, checkbox, ink } => {
                 if let Some(entry) = widget.entries.iter_mut().find(|e| e.id == id) {
                     if checkbox {
-                        entry.checkbox.append(ink, 1.0);
+                        entry.check.append(ink, 1.0);
                         entry.checked = true;
                     } else {
-                        entry.description.append(ink, 1.0);
+                        entry.label.append(ink, 1.0);
                     }
                 }
             }
@@ -196,7 +196,7 @@ fn main() {
             Msg::Uncheck { id } => {
                 if let Some(entry) = widget.entries.iter_mut().find(|e| e.id == id) {
                     entry.checked = false;
-                    entry.checkbox.clear();
+                    entry.check.clear();
                 }
             }
         }
