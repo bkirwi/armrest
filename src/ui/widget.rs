@@ -17,11 +17,6 @@ use libremarkable::framebuffer::common::color;
 use libremarkable::image::GrayImage;
 use std::marker::PhantomData;
 
-enum Handler<M> {
-    Tap { message: M },
-    Ink { message_fn: Box<dyn Fn(Ink) -> M> },
-}
-
 pub struct Handlers<M> {
     input: Option<Action>,
     messages: Vec<M>,
