@@ -51,6 +51,7 @@ dependencies = [
  "flo_curves",
  "hyphenation",
  "itertools 0.10.0",
+ "lazy_static",
  "libremarkable",
  "lyon_geom",
  "partial_sort",

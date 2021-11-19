@@ -1,7 +1,7 @@
 pub use crate::geom::*;
 
-use crate::gesture::Touch;
 use crate::ink::Ink;
+use crate::input::Touch;
 use libremarkable::cgmath::{EuclideanSpace, Point2, Vector2};
 
 use libremarkable::framebuffer::FramebufferDraw;
@@ -12,14 +12,15 @@ use std::hash::{Hash, Hasher};
 
 use std::ops::{Deref, DerefMut};
 
-use crate::ui::{ContentHash, Frame};
+use crate::ui::{Canvas, ContentHash, Frame};
 use libremarkable::framebuffer::common::color;
 use libremarkable::image::GrayImage;
+use std::any::TypeId;
 use std::marker::PhantomData;
 
 pub struct Handlers<M> {
-    input: Option<Action>,
-    messages: Vec<M>,
+    pub(crate) input: Option<Action>,
+    pub(crate) messages: Vec<M>,
 }
 
 impl<M> Handlers<M> {
@@ -48,7 +49,7 @@ impl<M> Handlers<M> {
         }
     }
 
-    pub fn on_ink(&mut self, frame: &impl Regional, message_fn: impl Fn(Ink) -> M) {
+    pub fn on_ink(&mut self, frame: &impl Regional, message_fn: impl FnOnce(Ink) -> M) {
         if let Some(a) = &self.input {
             let center = a.center();
             if let Action::Ink(i) = a {
@@ -68,6 +69,7 @@ impl<M> Handlers<M> {
     }
 }
 
+// TODO: could be made private!
 #[derive(Debug, Clone)]
 pub enum Action {
     Touch(Touch),
@@ -95,6 +97,36 @@ impl Action {
             Action::Ink(i) => Action::Ink(i.translate(float_offset)),
             Action::Unknown => Action::Unknown,
         }
+    }
+}
+
+/// Represents a single fragment of on-screen content.
+pub trait Fragment: Hash + 'static {
+    fn draw(&self, canvas: &mut Canvas);
+    fn render(&self, frame: Frame) {
+        let mut hasher = DefaultHasher::new();
+        TypeId::of::<Self>().hash(&mut hasher);
+        self.hash(&mut hasher);
+        if let Some(mut canvas) = frame.canvas(hasher.finish()) {
+            self.draw(&mut canvas);
+        }
+    }
+}
+
+#[derive(Hash)]
+pub struct Line {
+    pub y: i32,
+}
+
+impl Fragment for Line {
+    fn draw(&self, canvas: &mut Canvas) {
+        let region = canvas.bounds();
+        canvas.framebuffer().draw_line(
+            Point2::new(region.top_left.x, region.top_left.y + self.y),
+            Point2::new(region.bottom_right.x, region.top_left.y + self.y),
+            1,
+            color::GRAY(0x80),
+        );
     }
 }
 
@@ -234,6 +266,23 @@ impl IsVoid for Void {
     }
 }
 
+pub struct Draw<F> {
+    pub size: Vector2<i32>,
+    pub fragment: F,
+}
+
+impl<F: Fragment> Widget for Draw<F> {
+    type Message = Void;
+
+    fn size(&self) -> Vector2<i32> {
+        self.size
+    }
+
+    fn render<'a>(&'a self, _: &'a mut Handlers<Self::Message>, frame: Frame<'a>) {
+        self.fragment.render(frame);
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Stack<T> {
     bounds: Vector2<i32>,
@@ -303,58 +352,6 @@ impl<T> Deref for Stack<T> {
 impl<T> DerefMut for Stack<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.widgets
-    }
-}
-
-pub struct InputArea<M = Void> {
-    size: Vector2<i32>,
-    pub ink: Ink,
-    on_ink: Option<M>,
-}
-
-impl<M> InputArea<M> {
-    pub fn new(size: Vector2<i32>) -> InputArea<M> {
-        InputArea {
-            size,
-            ink: Ink::new(),
-            on_ink: None,
-        }
-    }
-}
-
-impl<A> InputArea<A> {
-    pub fn on_ink(self, message: Option<A>) -> InputArea<A> {
-        InputArea {
-            size: self.size,
-            ink: self.ink,
-            on_ink: message,
-        }
-    }
-}
-
-impl<M: Clone> Widget for InputArea<M> {
-    type Message = M;
-
-    fn size(&self) -> Vector2<i32> {
-        self.size
-    }
-
-    fn render<'a>(&'a self, handlers: &'a mut Handlers<Self::Message>, mut sink: Frame<'a>) {
-        if let Some(_m) = self.on_ink.clone() {
-            handlers.on_ink(&sink, m);
-        }
-
-        if !self.ink.points.is_empty() {
-            sink.push_annotation(&self.ink);
-        }
-
-        if let Some(mut canvas) = sink.canvas(283746) {
-            let y = self.size.y * 2 / 3;
-            for x in 0..(self.size.x) {
-                canvas.write(x, y, u8::MAX);
-            }
-            canvas.ink(&self.ink)
-        }
     }
 }
 

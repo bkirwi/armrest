@@ -10,6 +10,8 @@ use flo_curves::bezier::Curve;
 use flo_curves::{Coordinate, Coordinate3D};
 use libremarkable::cgmath::{Angle, ElementWise, EuclideanSpace, InnerSpace, Point3, Vector3};
 
+use std::sync::mpsc;
+use std::thread;
 use std::time::Instant;
 use tflite::ops::builtin::BuiltinOpResolver;
 use tflite::{FlatBufferModel, Interpreter, InterpreterBuilder};
@@ -208,6 +210,16 @@ impl ModelInput<Bezier> for Ink {
 pub trait ModelOutput {
     type Out;
     fn read_from(&self, buffer: &[f32]) -> Self::Out;
+}
+
+pub struct RawOutput;
+
+impl ModelOutput for RawOutput {
+    type Out = Vec<f32>;
+
+    fn read_from(&self, buffer: &[f32]) -> Self::Out {
+        buffer.to_vec()
+    }
 }
 
 pub struct Greedy;
@@ -468,6 +480,54 @@ fn beam_decode(
     result.sort_by(|(_, p0), (_, p1)| p1.partial_cmp(p0).expect("NAN???"));
 
     result
+}
+
+pub struct RecognizerThread {
+    sender: mpsc::Sender<(Ink, Box<dyn FnOnce(&[f32]) + Send>)>,
+}
+
+impl Default for RecognizerThread {
+    fn default() -> Self {
+        RecognizerThread::spawn()
+    }
+}
+
+impl RecognizerThread {
+    pub fn spawn() -> Self {
+        RecognizerThread::spawn_from(Recognizer::new().unwrap())
+    }
+
+    pub fn spawn_from(mut recognizer: Recognizer<'static, Spline>) -> RecognizerThread {
+        let (sender, receiver): (
+            mpsc::Sender<(Ink, Box<dyn FnOnce(&[f32]) + Send>)>,
+            mpsc::Receiver<(Ink, Box<dyn FnOnce(&[f32]) + Send>)>,
+        ) = mpsc::channel();
+
+        let _thread = thread::spawn(move || {
+            for (ink, output) in receiver {
+                let raw = recognizer.recognize(&ink, &RawOutput).unwrap();
+                output(&raw)
+            }
+        });
+
+        RecognizerThread { sender }
+    }
+
+    pub fn recognize_async<O: ModelOutput + Send + 'static>(
+        &self,
+        ink: Ink,
+        output: O,
+        callback: impl FnOnce(O::Out) + Send + 'static,
+    ) {
+        self.sender
+            .send((
+                ink,
+                Box::new(move |buffer| {
+                    callback(output.read_from(buffer));
+                }),
+            ))
+            .unwrap()
+    }
 }
 
 #[cfg(test)]
