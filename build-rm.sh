@@ -17,10 +17,10 @@ export BINDGEN_EXTRA_CLANG_ARGS="\
   -I$RM_TOOLCHAIN/sysroots/cortexa7hf-neon-remarkable-linux-gnueabi/usr/include/c++/9.3.0\
   -I$RM_TOOLCHAIN/sysroots/cortexa7hf-neon-remarkable-linux-gnueabi/usr/include\
   -I$RM_TOOLCHAIN/sysroots/cortexa7hf-neon-remarkable-linux-gnueabi/usr/include/c++/9.3.0/arm-remarkable-linux-gnueabi"
-#  --sysroot=$RM_TOOLCHAIN/sysroots/cortexa9hf-neon-oe-linux-gnueabi"
+#  --sysroot=$RM_TOOLCHAIN/sysroots/cortexa9hf-neon-remarkable-linux-gnueabi"
 
 # Arguments for the tensorflow build in the build.rs file of tflite-rs.
-export TFLITE_RS_MAKE_TARGET_TOOLCHAIN_PREFIX="arm-oe-linux-gnueabi-"
-export TFLITE_RS_MAKE_EXTRA_CFLAGS="-march=armv7-a -mfpu=neon -mfloat-abi=hard -mcpu=cortex-a9 --sysroot=$RM_TOOLCHAIN/sysroots/cortexa9hf-neon-oe-linux-gnueabi"
+export TFLITE_RS_MAKE_TARGET_TOOLCHAIN_PREFIX="arm-remarkable-linux-gnueabi-"
+export TFLITE_RS_MAKE_EXTRA_CFLAGS="-mfpu=neon -mfloat-abi=hard -mcpu=cortex-a9 --sysroot=$RM_TOOLCHAIN/sysroots/cortexa7hf-neon-remarkable-linux-gnueabi"
 
 exec cargo build --release --target armv7-unknown-linux-gnueabihf $@
