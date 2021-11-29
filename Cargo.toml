@@ -5,8 +5,7 @@ authors = ["Ben Kirwin <ben@kirw.in>"]
 edition = "2018"
 
 [dependencies]
-libremarkable = "0.5.0"
-# libremarkable = { path = "../libremarkable" }
+libremarkable = { version = "0.5.0", path = "../libremarkable" }
 tflite = { git = "https://github.com/bkirwi/tflite-rs", rev = "7d5a0d8a51378313dbe017c32299a51e002c06b5" }
 #tflite = { path = "../tflite-rs" }
 flo_curves = "0.4.1"
