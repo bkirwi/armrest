@@ -1,25 +1,24 @@
-use std::{fs, thread};
-
 #[macro_use]
 extern crate lazy_static;
 
-use libremarkable::framebuffer::cgmath::Vector2;
-use rusttype::Font;
-
-use armrest::app;
-use armrest::ink::Ink;
-
-use armrest::app::{App, Applet, Component, Sender};
-use armrest::geom::Regional;
-use armrest::ml::RecognizerThread;
-use armrest::ui::ink_area::InkArea;
-use armrest::ui::{Canvas, Draw, Fragment, Frame, Handlers, Line, Side, Text, Void, Widget};
-use libremarkable::cgmath::{ElementWise, EuclideanSpace, Point2};
-use libremarkable::framebuffer::common::{color, DISPLAYHEIGHT, DISPLAYWIDTH};
-use libremarkable::framebuffer::FramebufferDraw;
 use std::borrow::Borrow;
 use std::io::Write;
 use std::sync::mpsc;
+use std::{fs, thread};
+
+use libremarkable::cgmath::{ElementWise, EuclideanSpace, Point2};
+use libremarkable::framebuffer::cgmath::Vector2;
+use libremarkable::framebuffer::common::{color, DISPLAYHEIGHT, DISPLAYWIDTH};
+use libremarkable::framebuffer::FramebufferDraw;
+use rusttype::Font;
+
+use armrest::app;
+use armrest::app::{App, Applet, Component, Sender};
+use armrest::geom::Regional;
+use armrest::ink::Ink;
+use armrest::ml::RecognizerThread;
+use armrest::ui::ink_area::InkArea;
+use armrest::ui::{Canvas, Draw, Fragment, Frame, Handlers, Line, Side, Text, View, Void, Widget};
 
 lazy_static! {
     static ref ROMAN: Font<'static> = {
@@ -48,29 +47,30 @@ impl Widget for Demo {
         Vector2::new(DISPLAYWIDTH as i32, DISPLAYHEIGHT as i32)
     }
 
-    fn render<'a>(&'a self, handlers: &'a mut Handlers<Self::Message>, mut frame: Frame<'a>) {
-        frame.horizontal_space(1200, 0.5);
-        let header = frame.split_off(Side::Top, 200);
+    fn render<'a>(&'a self, mut view: View<Msg>) {
+        view.split_off(Side::Left, 100);
+        view.split_off(Side::Right, 100);
+        let header = view.split_off(Side::Top, 200);
         self.header_text
             .borrow()
             .void()
-            .render_placed(handlers, header, 0.0, 0.75);
+            .render_placed(header, 0.0, 0.75);
 
         self.prompt
             .borrow()
             .void()
-            .render_split(handlers, &mut frame, Side::Top, 0.0);
+            .render_split(&mut view, Side::Top, 0.0);
 
         self.handwriting
             .borrow()
             .map(Msg::RecognizedText)
-            .render_split(handlers, &mut frame, Side::Top, 0.0);
+            .render_split(&mut view, Side::Top, 0.0);
 
         for result in &self.results {
             result
                 .borrow()
                 .void()
-                .render_split(handlers, &mut frame, Side::Top, 0.0)
+                .render_split(&mut view, Side::Top, 0.0)
         }
     }
 }

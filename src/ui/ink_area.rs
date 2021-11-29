@@ -1,7 +1,7 @@
 use crate::app::{Applet, Component, Sender, Wakeup};
 use crate::ink::Ink;
 use crate::ml::{Beam, LanguageModel, RecognizerThread};
-use crate::ui::{Frame, Handlers, Void, Widget};
+use crate::ui::{Frame, Handlers, View, Void, Widget};
 use libremarkable::cgmath::Vector2;
 
 type RecognizedText = Vec<(String, f32)>;
@@ -60,9 +60,9 @@ impl<T: Widget<Message = Void>, LM> Widget for InkArea<T, LM> {
         self.widget.size()
     }
 
-    fn render<'a>(&'a self, handlers: &'a mut Handlers<Self::Message>, mut frame: Frame<'a>) {
-        frame.push_annotation(&self.ink);
-        handlers.on_ink(&frame, InkMsg::Inked)
+    fn render(&self, mut view: View<Self::Message>) {
+        view.frame.push_annotation(&self.ink);
+        view.handlers().on_ink(InkMsg::Inked)
     }
 }
 

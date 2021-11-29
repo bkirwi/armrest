@@ -1,7 +1,7 @@
 use crate::geom::Region;
 use crate::input;
 use crate::input::{Gesture, Tool};
-use crate::ui::{Action, Frame, Handlers, Screen, Void, Widget};
+use crate::ui::{Action, Frame, Handlers, Screen, View, Void, Widget};
 use libremarkable::cgmath::{Point2, Vector2};
 use libremarkable::framebuffer::common::{DISPLAYHEIGHT, DISPLAYWIDTH};
 use libremarkable::framebuffer::core::Framebuffer;
@@ -81,8 +81,14 @@ impl App {
         let mut screen = Screen::new(Framebuffer::from_path("/dev/fb0"));
         screen.clear();
 
-        let mut handlers = Handlers::new();
-        widget.render_placed(&mut handlers, screen.root(), 0.5, 0.5);
+        let mut input = None;
+        let mut messages = vec![];
+        let view = View {
+            input: &input,
+            messages: &mut messages,
+            frame: screen.root(),
+        };
+        widget.render(view);
         screen.refresh_changes();
 
         // Send all input events to input_rx
@@ -124,10 +130,13 @@ impl App {
             let gesture_time = Instant::now();
 
             if let Some(a) = action {
-                handlers = Handlers::from_action(a);
-                widget.render(&mut handlers, screen.root());
+                widget.render(View {
+                    input: &Some(a),
+                    messages: &mut messages,
+                    frame: screen.root(),
+                });
 
-                for m in handlers.query() {
+                for m in messages.drain(..) {
                     widget.update(m);
                 }
                 should_update = true;
@@ -144,17 +153,26 @@ impl App {
             let handler_time = Instant::now();
 
             if should_update {
-                handlers = Handlers::new();
-                widget.render(&mut handlers, screen.root());
+                widget.render(View {
+                    input: &None,
+                    messages: &mut messages,
+                    frame: screen.root(),
+                });
                 let render_one_time = Instant::now();
                 if let Some(region) = screen.invalid_annotation.clone() {
                     screen.invalidate(region);
                     screen.invalid_annotation = None;
                 }
-                handlers = Handlers::new();
-                widget.render(&mut handlers, screen.root());
-                handlers = Handlers::new();
-                widget.render(&mut handlers, screen.root());
+                widget.render(View {
+                    input: &None,
+                    messages: &mut messages,
+                    frame: screen.root(),
+                });
+                widget.render(View {
+                    input: &None,
+                    messages: &mut messages,
+                    frame: screen.root(),
+                });
                 let render_all_time = Instant::now();
                 screen.refresh_changes();
                 should_update = false;
@@ -217,21 +235,28 @@ impl<T: Applet> Widget for Component<T> {
         self.applet.borrow().size()
     }
 
-    fn render<'a>(&'a self, handlers: &'a mut Handlers<Self::Message>, frame: Frame<'a>) {
-        let mut applet_handlers = match handlers.input.clone() {
-            None => Handlers::new(),
-            Some(a) => Handlers::from_action(a),
-        };
-        self.applet.borrow().render(&mut applet_handlers, frame);
-        for message in applet_handlers.query() {
-            if let Some(m) = self.applet.borrow_mut().update(message) {
-                handlers.messages.push(m);
-            }
-        }
-        // if matches!(handlers.input, Some(Action::Unknown)) {
+    fn render(&self, mut view: View<Self::Message>) {
+        let View {
+            input,
+            messages,
+            frame,
+        } = view;
+        let mut nested_messages = vec![];
+        self.applet.borrow().render(View {
+            input,
+            messages: &mut nested_messages,
+            frame,
+        });
+
+        nested_messages.reverse();
+
         while let Ok(message) = self.rx.try_recv() {
+            nested_messages.push(message);
+        }
+
+        for message in nested_messages {
             if let Some(m) = self.applet.borrow_mut().update(message) {
-                handlers.messages.push(m);
+                messages.push(m);
             }
         }
     }

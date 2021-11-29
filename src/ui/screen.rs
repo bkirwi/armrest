@@ -195,7 +195,7 @@ pub struct Frame<'a> {
     node: &'a mut DrawTree,
     index: usize,
     content: ContentHash,
-    annotations: Vec<(Point2<i32>, &'a Ink)>,
+    annotations: Vec<(Point2<i32>, Region)>,
 }
 
 impl Drop for Frame<'_> {
@@ -205,21 +205,16 @@ impl Drop for Frame<'_> {
         let mut new_region = None;
         let mut new_len = 0;
         for (p, a) in &self.annotations {
-            let region = a.bounds().translate(p.to_vec());
+            let region = a.translate(p.to_vec());
             new_region = Some(new_region.map_or(region, |b: Region| b.union(region)));
-            new_len += a.len();
+            new_len += a.bottom_right.x as usize;
         }
 
         match (self.node.annotation, new_region) {
             (Some((old_region, old_len)), Some(new_region)) => {
-                // TODO: do this only when we detect that it's necessary! (ie. the underlying region is dirty.)
-                for (p, a) in &self.annotations {
-                    draw_ink(self.fb, *p, a);
-                }
                 if old_region == new_region && old_len == new_len {
                     // Nothing to do!
                 } else {
-                    dbg!("diff", old_region, old_len, new_region, new_len);
                     // Mark the old region as removed, and the new one as added
                     *self.invalid_annotation = Some(
                         self.invalid_annotation
@@ -229,7 +224,6 @@ impl Drop for Frame<'_> {
                 }
             }
             (Some((old_region, _)), None) => {
-                dbg!("remove", old_region);
                 *self.invalid_annotation = Some(
                     self.invalid_annotation
                         .map_or(old_region, |b| b.union(old_region)),
@@ -238,9 +232,6 @@ impl Drop for Frame<'_> {
             }
             (None, Some(new_region)) => {
                 *self.dirty = Some(self.dirty.map_or(new_region, |d| d.union(new_region)));
-                for (p, a) in &self.annotations {
-                    draw_ink(self.fb, *p, a);
-                }
                 self.node.annotation = Some((new_region, new_len));
             }
             (None, None) => {
@@ -312,9 +303,11 @@ impl<'a> Frame<'a> {
         }
     }
 
-    pub fn push_annotation(&mut self, ink: &'a Ink) {
+    pub fn push_annotation(&mut self, ink: &Ink) {
         if ink.len() != 0 {
-            self.annotations.push((self.bounds.top_left, ink));
+            // TODO: do this only when we detect that it's necessary! (ie. the underlying region is dirty.)
+            draw_ink(self.fb, self.bounds.top_left, ink);
+            self.annotations.push((self.bounds.top_left, ink.bounds()));
         }
     }
 

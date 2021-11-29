@@ -7,7 +7,8 @@ use armrest::app;
 use armrest::ink::Ink;
 
 use armrest::app::{Applet, Component};
-use armrest::ui::{Canvas, Fragment, Frame, Handlers, Side, Text, Widget};
+use armrest::ui::canvas::{Canvas, Fragment};
+use armrest::ui::{Frame, Handlers, Side, Text, View, Widget};
 use libremarkable::cgmath::{ElementWise, EuclideanSpace, Point2};
 use libremarkable::framebuffer::common::{color, DISPLAYHEIGHT, DISPLAYWIDTH};
 use libremarkable::framebuffer::FramebufferDraw;
@@ -88,30 +89,29 @@ impl Widget for Entry {
         Vector2::new(DISPLAYWIDTH as i32, 100)
     }
 
-    fn render<'a>(&'a self, handlers: &'a mut Handlers<Self::Message>, mut frame: Frame<'a>) {
-        let mut check_area = frame.split_off(Side::Left, 210);
+    fn render(&self, mut view: View<Msg>) {
+        let mut check_area = view.split_off(Side::Left, 210);
 
         // Draw the checkbox area
-        handlers.on_ink(&check_area, |ink| Msg::TodoInk {
+        check_area.handlers().on_ink(|ink| Msg::TodoInk {
             id: self.id,
             checkbox: true,
             ink,
         });
-        handlers.on_tap(&check_area, Msg::Uncheck { id: self.id });
-        check_area.push_annotation(&self.check);
-        Checkbox {
+        check_area.handlers().on_tap(Msg::Uncheck { id: self.id });
+        check_area.annotate(&self.check);
+        check_area.draw(&Checkbox {
             checked: self.checked,
-        }
-        .render(check_area);
+        });
 
         // Draw the "main" area
-        handlers.on_ink(&frame, |ink| Msg::TodoInk {
+        view.handlers().on_ink(|ink| Msg::TodoInk {
             id: self.id,
             checkbox: false,
             ink,
         });
-        frame.push_annotation(&self.label);
-        Line { y: 80 }.render(frame);
+        view.annotate(&self.label);
+        view.draw(&Line { y: 80 });
     }
 }
 
@@ -130,25 +130,23 @@ impl Widget for TodoApp {
         Vector2::new(DISPLAYWIDTH as i32, DISPLAYHEIGHT as i32)
     }
 
-    fn render<'a>(&'a self, handlers: &'a mut Handlers<Self::Message>, mut frame: Frame<'a>) {
-        let mut head = frame.split_off(Side::Top, 220);
-        head.push_annotation(&self.header);
-        handlers.on_ink(&head, |ink| Msg::HeaderInk { ink });
+    fn render(&self, mut view: View<Msg>) {
+        let mut head = view.split_off(Side::Top, 220);
+        head.annotate(&self.header);
+        head.handlers().on_ink(|ink| Msg::HeaderInk { ink });
 
         {
             let mut menu = head.split_off(Side::Top, 180);
             menu.split_off(Side::Right, 40);
-            self.sort_button
-                .render_split(handlers, &mut menu, Side::Right, 1.0);
+            self.sort_button.render_split(&mut menu, Side::Right, 1.0);
             menu.split_off(Side::Right, 80);
-            self.clear_button
-                .render_split(handlers, &mut menu, Side::Right, 1.0);
+            self.clear_button.render_split(&mut menu, Side::Right, 1.0);
         }
 
-        Line { y: 10 }.render(head);
+        head.draw(&Line { y: 10 });
 
         for entry in &self.entries {
-            entry.render_split(handlers, &mut frame, Side::Top, 0.0);
+            entry.render_split(&mut view, Side::Top, 0.0);
         }
     }
 }

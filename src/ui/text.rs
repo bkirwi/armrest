@@ -1,5 +1,5 @@
 use crate::geom::Region;
-use crate::ui::{Frame, Handlers, Regional, Void, Widget};
+use crate::ui::{Frame, Handlers, Regional, View, Void, Widget};
 use itertools::Itertools;
 use libremarkable::cgmath::{Point2, Vector2};
 use rusttype::{point, Font, PositionedGlyph, Scale};
@@ -116,17 +116,16 @@ impl<M: Clone> Widget for Text<M> {
         self.size
     }
 
-    fn render(&self, handlers: &mut Handlers<Self::Message>, frame: Frame) {
+    fn render(&self, mut view: View<Self::Message>) {
         for (range, message) in &self.on_input {
             let region = Region::new(
                 Point2::new(range.start, 0),
                 Point2::new(range.end, self.size.y),
             );
-            let region = region.relative_to(&frame.bounds);
-            handlers.on_tap(&region, message.clone())
+            view.handlers().relative(region).on_tap(message.clone());
         }
 
-        frame.draw(self.hash, |mut canvas| {
+        view.frame.draw(self.hash, |mut canvas| {
             let underline_y = self.baseline + 2;
             for (range, _) in &self.on_input {
                 for x in range.clone() {
