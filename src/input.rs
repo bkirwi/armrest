@@ -8,7 +8,7 @@ use std::collections::HashMap;
 
 use crate::geom::Side;
 use std::mem;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub enum Tool {
@@ -26,6 +26,8 @@ enum Distance {
 pub struct State {
     ink: Ink,
     ink_start: Instant,
+    last_ink: Instant,
+    last_event: Instant,
     current_tool: Tool,
     tool_distance: Distance,
     last_pen_point: Option<Point2<i32>>,
@@ -70,7 +72,7 @@ impl Touch {
         if vec.x.abs() > 4.0 * vec.y.abs() {
             Some(if vec.x > 0.0 { Side::Right } else { Side::Left })
         } else if vec.y.abs() > 4.0 * vec.x.abs() {
-            Some(if vec.x > 0.0 { Side::Bottom } else { Side::Top })
+            Some(if vec.y > 0.0 { Side::Bottom } else { Side::Top })
         } else {
             None
         }
@@ -82,6 +84,8 @@ impl State {
         State {
             ink: Default::default(),
             ink_start: Instant::now(),
+            last_ink: Instant::now(),
+            last_event: Instant::now(),
             current_tool: Tool::Pen,
             tool_distance: Distance::Far,
             last_pen_point: None,
@@ -119,6 +123,14 @@ impl State {
     }
 
     pub fn on_event(&mut self, event: InputEvent) -> Option<Gesture> {
+        let mut now = Instant::now();
+        if now.duration_since(self.last_event) > Duration::from_secs(15) {
+            *self = State::new();
+            now = self.last_event;
+        }
+
+        self.last_event = now;
+
         match event {
             InputEvent::WacomEvent { event } => match event {
                 WacomEvent::InstrumentChange {
@@ -151,14 +163,16 @@ impl State {
                     tilt: _,
                 } => match self.tool_distance {
                     Distance::Down => {
+                        self.last_ink = now;
+
                         let current_point = position.map(|x| x as i32);
+                        let last_point =
+                            mem::replace(&mut self.last_pen_point, Some(current_point));
                         self.ink.push(
                             position.x,
                             position.y,
-                            self.ink_start.elapsed().as_secs_f32(),
+                            now.duration_since(self.ink_start).as_secs_f32(),
                         );
-                        let last_point =
-                            mem::replace(&mut self.last_pen_point, Some(current_point));
                         last_point
                             .map(|last| Gesture::Stroke(self.current_tool, last, current_point))
                     }
@@ -172,7 +186,9 @@ impl State {
                     // drawing and lift the hand.
                     // TODO: this but better: maybe discard slow touches, or invalidate any
                     // that overlap with the pen.
-                    if self.tool_distance == Distance::Far {
+                    if self.tool_distance == Distance::Far
+                        && now.duration_since(self.last_ink) > Duration::from_millis(250)
+                    {
                         self.fingers
                             .insert(finger.tracking_id, finger.pos.map(|p| p as f32));
                     }
