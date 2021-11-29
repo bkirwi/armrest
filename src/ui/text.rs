@@ -126,7 +126,7 @@ impl<M: Clone> Widget for Text<M> {
             handlers.on_tap(&region, message.clone())
         }
 
-        if let Some(mut canvas) = frame.canvas(self.hash) {
+        frame.draw(self.hash, |mut canvas| {
             let underline_y = self.baseline + 2;
             for (range, _) in &self.on_input {
                 for x in range.clone() {
@@ -152,7 +152,7 @@ impl<M: Clone> Widget for Text<M> {
                     });
                 }
             }
-        }
+        });
     }
 }
 

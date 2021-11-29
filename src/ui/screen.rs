@@ -1,5 +1,6 @@
 use crate::geom::{Region, Regional, Side};
 use crate::ink::Ink;
+use crate::ui::canvas::{Canvas, Fragment};
 use libremarkable::cgmath::{EuclideanSpace, Point2, Vector2};
 use libremarkable::framebuffer::common::{
     color, display_temp, dither_mode, mxcfb_rect, waveform_mode, DISPLAYHEIGHT, DISPLAYWIDTH,
@@ -8,6 +9,9 @@ use libremarkable::framebuffer::common::{
 use libremarkable::framebuffer::core::Framebuffer;
 use libremarkable::framebuffer::refresh::PartialRefreshMode;
 use libremarkable::framebuffer::{FramebufferDraw, FramebufferIO, FramebufferRefresh};
+use std::any::TypeId;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 
 /// Refresh the entire screen, including a flash to clear ghosting.
 /// Appropriate between major transitions in the app.
@@ -181,34 +185,6 @@ impl Screen {
     }
 }
 
-pub struct Canvas<'a>(Frame<'a>);
-
-impl<'a> Canvas<'a> {
-    pub fn framebuffer(&mut self) -> &mut Framebuffer<'static> {
-        self.0.fb
-    }
-
-    pub fn bounds(&self) -> Region {
-        self.0.bounds
-    }
-
-    pub fn ink(&mut self, ink: &Ink) {
-        draw_ink(self.0.fb, self.0.bounds.top_left, ink);
-    }
-
-    pub fn write(&mut self, x: i32, y: i32, color: u8) {
-        let Region {
-            top_left,
-            bottom_right,
-        } = self.0.bounds;
-        let point = Point2::new(top_left.x + x, top_left.y + y);
-        // NB: this impl already contains the bounds check!
-        if point.x < bottom_right.x && point.y < bottom_right.y {
-            self.0.fb.write_pixel(point, color::GRAY(color));
-        }
-    }
-}
-
 pub struct Frame<'a> {
     fb: &'a mut Framebuffer<'static>,
     dirty: &'a mut Option<Region>,
@@ -243,6 +219,7 @@ impl Drop for Frame<'_> {
                 if old_region == new_region && old_len == new_len {
                     // Nothing to do!
                 } else {
+                    dbg!("diff", old_region, old_len, new_region, new_len);
                     // Mark the old region as removed, and the new one as added
                     *self.invalid_annotation = Some(
                         self.invalid_annotation
@@ -252,6 +229,7 @@ impl Drop for Frame<'_> {
                 }
             }
             (Some((old_region, _)), None) => {
+                dbg!("remove", old_region);
                 *self.invalid_annotation = Some(
                     self.invalid_annotation
                         .map_or(old_region, |b| b.union(old_region)),
@@ -310,6 +288,7 @@ impl<'a> Frame<'a> {
 
                 result
             }
+
             for (_, _, child) in self.node.children.drain(self.index..) {
                 if let Some(r) = all_annotations(child) {
                     merge_region(self.invalid_annotation, r);
@@ -339,16 +318,27 @@ impl<'a> Frame<'a> {
         }
     }
 
-    pub fn canvas(mut self, hash: ContentHash) -> Option<Canvas<'a>> {
+    pub fn draw(mut self, hash: ContentHash, draw_fn: impl FnOnce(Canvas)) {
         if hash == self.node.content {
             self.content = hash;
-            None
         } else {
             self.truncate();
             self.content = hash;
             self.node.content = hash;
-            Some(Canvas(self))
+            draw_fn(Canvas {
+                framebuffer: self.fb,
+                bounds: self.bounds,
+            });
         }
+    }
+
+    pub(crate) fn draw_fragment<F: Fragment>(mut self, fragment: &F) {
+        let mut hasher = DefaultHasher::new();
+        TypeId::of::<F>().hash(&mut hasher);
+        fragment.hash(&mut hasher);
+        self.draw(hasher.finish(), |mut canvas| {
+            fragment.draw(&mut canvas);
+        });
     }
 
     /// Split a smaller canvas off from this one, at the given side and offset.

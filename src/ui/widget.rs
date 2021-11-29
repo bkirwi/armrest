@@ -12,7 +12,8 @@ use std::hash::{Hash, Hasher};
 
 use std::ops::{Deref, DerefMut};
 
-use crate::ui::{Canvas, ContentHash, Frame};
+use crate::ui::canvas::{Canvas, Fragment, Image};
+use crate::ui::{ContentHash, Frame};
 use libremarkable::framebuffer::common::color;
 use libremarkable::image::{GrayImage, RgbImage};
 use std::any::TypeId;
@@ -117,36 +118,6 @@ impl Action {
             Action::Ink(i) => Action::Ink(i.translate(float_offset)),
             Action::Unknown => Action::Unknown,
         }
-    }
-}
-
-/// Represents a single fragment of on-screen content.
-pub trait Fragment: Hash + 'static {
-    fn draw(&self, canvas: &mut Canvas);
-    fn render(&self, frame: Frame) {
-        let mut hasher = DefaultHasher::new();
-        TypeId::of::<Self>().hash(&mut hasher);
-        self.hash(&mut hasher);
-        if let Some(mut canvas) = frame.canvas(hasher.finish()) {
-            self.draw(&mut canvas);
-        }
-    }
-}
-
-#[derive(Hash)]
-pub struct Line {
-    pub y: i32,
-}
-
-impl Fragment for Line {
-    fn draw(&self, canvas: &mut Canvas) {
-        let region = canvas.bounds();
-        canvas.framebuffer().draw_line(
-            Point2::new(region.top_left.x, region.top_left.y + self.y),
-            Point2::new(region.bottom_right.x, region.top_left.y + self.y),
-            1,
-            color::GRAY(0x80),
-        );
     }
 }
 
@@ -299,7 +270,7 @@ impl<F: Fragment> Widget for Draw<F> {
     }
 
     fn render<'a>(&'a self, _: &'a mut Handlers<Self::Message>, frame: Frame<'a>) {
-        self.fragment.render(frame);
+        frame.draw_fragment(&self.fragment);
     }
 }
 
@@ -486,52 +457,6 @@ where
     }
 }
 
-pub struct Fill {
-    size: Vector2<i32>,
-    color: u8,
-}
-
-impl Fill {
-    pub fn new(size: Vector2<i32>, color: u8) -> Fill {
-        Fill { size, color }
-    }
-}
-
-impl Widget for Fill {
-    type Message = Void;
-
-    fn size(&self) -> Vector2<i32> {
-        self.size
-    }
-
-    fn render(&self, _: &mut Handlers<Self::Message>, frame: Frame) {
-        if let Some(mut canvas) = frame.canvas(self.color as ContentHash) {
-            let bounds = canvas.bounds();
-            canvas.framebuffer().fill_rect(
-                bounds.top_left,
-                bounds.size().map(|c| c as u32),
-                color::GRAY(self.color),
-            );
-        }
-    }
-}
-
-pub struct Image {
-    data: RgbImage,
-    hash: ContentHash,
-}
-
-impl Image {
-    pub fn new(image: RgbImage) -> Image {
-        let mut hasher = DefaultHasher::new();
-        image.hash(&mut hasher);
-        Image {
-            data: image,
-            hash: hasher.finish(),
-        }
-    }
-}
-
 impl Widget for Image {
     type Message = Void;
 
@@ -540,13 +465,6 @@ impl Widget for Image {
     }
 
     fn render(&self, _: &mut Handlers<Self::Message>, frame: Frame) {
-        if let Some(mut canvas) = frame.canvas(self.hash) {
-            let top_left = canvas.bounds().top_left;
-            let framebuffer = canvas.framebuffer();
-            for (x, y, p) in self.data.enumerate_pixels() {
-                let color = color::RGB(p.data[0], p.data[1], p.data[2]);
-                framebuffer.write_pixel(top_left + Vector2::new(x as i32, y as i32), color);
-            }
-        }
+        frame.draw_fragment(self);
     }
 }
