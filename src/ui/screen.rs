@@ -152,6 +152,8 @@ impl Screen {
 
     pub fn refresh_changes(&mut self) {
         if let Some(bounds) = self.dirty.take() {
+            self.dirty_annotation = None;
+            self.invalid_annotation = None;
             partial_refresh(&mut self.fb, bounds.rect());
         }
     }
