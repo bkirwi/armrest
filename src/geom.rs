@@ -138,8 +138,8 @@ impl Region {
     }
 
     pub fn pad(&self, padding: i32) -> Region {
-        let top_left = self.top_left.add_element_wise(padding);
-        let bottom_right = self.bottom_right.sub_element_wise(padding);
+        let top_left = self.top_left.sub_element_wise(padding);
+        let bottom_right = self.bottom_right.add_element_wise(padding);
 
         Region::new(top_left, bottom_right)
     }
@@ -166,6 +166,10 @@ pub trait Regional {
     fn relative_to(&self, other: &impl Regional) -> Region {
         let this = other.region();
         self.region().translate(this.top_left.to_vec())
+    }
+
+    fn pad(&self, padding: i32) -> Region {
+        self.region().pad(padding)
     }
 }
 
