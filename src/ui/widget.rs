@@ -4,7 +4,7 @@ use crate::ink::Ink;
 use crate::input::Touch;
 use libremarkable::cgmath::{EuclideanSpace, Point2, Vector2};
 
-use libremarkable::framebuffer::FramebufferDraw;
+use libremarkable::framebuffer::{FramebufferDraw, FramebufferIO};
 
 use std::collections::hash_map::DefaultHasher;
 use std::fmt::Debug;
@@ -14,7 +14,7 @@ use std::ops::{Deref, DerefMut};
 
 use crate::ui::{Canvas, ContentHash, Frame};
 use libremarkable::framebuffer::common::color;
-use libremarkable::image::GrayImage;
+use libremarkable::image::{GrayImage, RgbImage};
 use std::any::TypeId;
 use std::marker::PhantomData;
 
@@ -38,13 +38,33 @@ impl<M> Handlers<M> {
         }
     }
 
-    pub fn on_tap(&mut self, frame: &impl Regional, message: M) {
+    pub fn on_swipe(&mut self, frame: &impl Regional, to_edge: Side, message: M) {
         if let Some(a) = &self.input {
             let center = a.center();
             if let Action::Touch(t) = a {
-                if t.length() < 20.0 && frame.region().contains(center) {
+                if t.to_swipe() == Some(to_edge) && frame.region().contains(center) {
                     self.messages.push(message);
                 }
+            }
+        }
+    }
+
+    /// NB: allows tapping with the pen.
+    pub fn on_tap(&mut self, frame: &impl Regional, message: M) {
+        if let Some(a) = &self.input {
+            let center = a.center();
+            match a {
+                Action::Touch(t) => {
+                    if t.length() < 20.0 && frame.region().contains(center) {
+                        self.messages.push(message);
+                    }
+                }
+                Action::Ink(i) => {
+                    if i.ink_len() < 20.0 && frame.region().contains(center) {
+                        self.messages.push(message);
+                    }
+                }
+                Action::Unknown => {}
             }
         }
     }
@@ -317,6 +337,19 @@ impl<T> Stack<T> {
         self.widgets.clear();
     }
 
+    pub fn pop(&mut self) -> Option<T>
+    where
+        T: Widget,
+    {
+        let popped = self.widgets.pop();
+
+        if let Some(t) = &popped {
+            self.offset -= t.size().y;
+        }
+
+        popped
+    }
+
     pub fn push(&mut self, widget: T)
     where
         T: Widget,
@@ -483,13 +516,13 @@ impl Widget for Fill {
     }
 }
 
-struct Image {
-    data: GrayImage,
+pub struct Image {
+    data: RgbImage,
     hash: ContentHash,
 }
 
 impl Image {
-    pub fn new(image: GrayImage) -> Image {
+    pub fn new(image: RgbImage) -> Image {
         let mut hasher = DefaultHasher::new();
         image.hash(&mut hasher);
         Image {
@@ -508,8 +541,11 @@ impl Widget for Image {
 
     fn render(&self, _: &mut Handlers<Self::Message>, frame: Frame) {
         if let Some(mut canvas) = frame.canvas(self.hash) {
+            let top_left = canvas.bounds().top_left;
+            let framebuffer = canvas.framebuffer();
             for (x, y, p) in self.data.enumerate_pixels() {
-                canvas.write(x as i32, y as i32, p.data[0])
+                let color = color::RGB(p.data[0], p.data[1], p.data[2]);
+                framebuffer.write_pixel(top_left + Vector2::new(x as i32, y as i32), color);
             }
         }
     }
