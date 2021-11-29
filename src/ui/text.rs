@@ -56,13 +56,13 @@ impl Debug for Span {
 
 impl Fragment for Span {
     fn width(&self) -> usize {
-        self.width as usize
+        self.width.ceil() as usize
     }
 
     fn whitespace_width(&self) -> usize {
         match self.word_end {
             WordEnd::Sticky => 0,
-            WordEnd::Space(size) => size as usize,
+            WordEnd::Space(size) => size.ceil() as usize,
         }
     }
 
@@ -74,6 +74,7 @@ impl Fragment for Span {
 #[derive(Clone)]
 pub struct Text<M = Void> {
     size: Vector2<i32>,
+    baseline: i32,
     glyphs: Vec<PositionedGlyph<'static>>,
     hash: u64,
     on_input: Vec<(Range<i32>, M)>,
@@ -126,6 +127,13 @@ impl<M: Clone> Widget for Text<M> {
         }
 
         if let Some(mut canvas) = frame.canvas(self.hash) {
+            let underline_y = self.baseline + 2;
+            for (range, _) in &self.on_input {
+                for x in range.clone() {
+                    canvas.write(x, underline_y, 255);
+                }
+            }
+
             for glyph in &self.glyphs {
                 // Draw the glyph into the image per-pixel by using the draw closure
                 if let Some(bounding_box) = glyph.pixel_bounding_box() {
@@ -181,6 +189,11 @@ impl<'a, M> TextBuilder<'a, M> {
         self
     }
 
+    pub fn baseline(mut self, from_top: f32) -> Self {
+        self.baseline = from_top;
+        self
+    }
+
     pub fn scale(mut self, scale: f32) -> Self {
         self.current_scale = scale;
         self
@@ -207,6 +220,7 @@ impl<'a, M> TextBuilder<'a, M> {
             self.on_input
                 .push((start, start_offset, end, end_offset, message));
         }
+        assert!(self.current_message.is_none());
         self
     }
 
@@ -256,6 +270,7 @@ impl<'a, M> TextBuilder<'a, M> {
 
         Text {
             size: Vector2::new(word_start.ceil() as i32, self.height),
+            baseline: self.baseline.ceil() as i32,
             glyphs,
             hash: hasher.finish(),
             on_input,
@@ -350,33 +365,39 @@ impl<'a, M> TextBuilder<'a, M> {
 
         let mut result: Vec<TextBuilder<M>> = vec![];
 
-        self.on_input.reverse();
-
+        // Sorry!!
         let mut index = 0;
         for (i, line) in lines.iter().enumerate() {
             let end_index = index + line.len();
 
-            // First, we peel off the messages that are entirely in the current span.
+            // First, we look for the first message that isn't entirely on the current line
+            // ie. where the final word is not less than the end index
             let split_index = self
                 .on_input
                 .iter()
-                .position(|(_, _, end_offset, _, _)| *end_offset >= end_index)
+                .position(|(_, _, end_offset, _, _)| !(*end_offset < end_index))
                 .unwrap_or(self.on_input.len());
 
             let mut current_input = self.on_input.split_off(split_index);
-            for (s, _, e, _, _) in &mut current_input {
-                *s -= index;
-                *e -= index;
-            }
+            std::mem::swap(&mut current_input, &mut self.on_input);
 
             // It's possible that the first remaining range extends into the current as well.
             // If so, split it in half and keep the first half.
-            if let Some((start, start_offset, _, _, message)) = self.on_input.first_mut() {
+            if let Some((start, start_offset, end, _, message)) = self.on_input.first_mut() {
                 if *start < end_index {
+                    assert!(
+                        *end >= end_index,
+                        "Link should have been included fully in the current line! {} <= {} <= {} < {} ({})",
+                        index,
+                        start,
+                        end,
+                        end_index,
+                        split_index,
+                    );
                     current_input.push((
-                        *start - index,
+                        *start,
                         *start_offset,
-                        line.len() - 1,
+                        end_index - 1,
                         line.last().unwrap().width,
                         message.clone(),
                     ));
@@ -384,6 +405,13 @@ impl<'a, M> TextBuilder<'a, M> {
                     *start = end_index;
                     *start_offset = 0.0;
                 }
+            }
+
+            for (s, _, e, _, _) in &mut current_input {
+                assert!(*s > index);
+                assert!(*e > index);
+                *s -= index;
+                *e -= index;
             }
 
             index = end_index;
@@ -402,12 +430,14 @@ impl<'a, M> TextBuilder<'a, M> {
             });
         }
 
-        if justify {
-            let last_line = result.len() - 1;
-            for (i, line) in result.iter_mut().enumerate() {
-                let min_length = if i == last_line { 0 } else { length };
-                line.set_length(min_length, length);
-            }
+        let last_line = result.len() - 1;
+        for (i, line) in result.iter_mut().enumerate() {
+            let min_length = if !justify || i == last_line {
+                0
+            } else {
+                length
+            };
+            line.set_length(min_length, length);
         }
 
         result.into_iter().map(|b| b.into_text()).collect()
