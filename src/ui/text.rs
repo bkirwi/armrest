@@ -2,6 +2,7 @@ use crate::geom::Region;
 use crate::ui::{Frame, Handlers, Regional, View, Void, Widget};
 use itertools::Itertools;
 use libremarkable::cgmath::{Point2, Vector2};
+use libremarkable::framebuffer::common::color;
 use rusttype::{point, Font, PositionedGlyph, Scale};
 use std::collections::hash_map::DefaultHasher;
 use std::fmt::{Debug, Formatter};
@@ -129,7 +130,7 @@ impl<M: Clone> Widget for Text<M> {
             let underline_y = self.baseline + 2;
             for (range, _) in &self.on_input {
                 for x in range.clone() {
-                    canvas.write(x, underline_y, 255);
+                    canvas.write(x, underline_y, color::BLACK);
                 }
             }
 
@@ -145,7 +146,7 @@ impl<M: Clone> Widget for Text<M> {
                             canvas.write(
                                 bounding_box.min.x + x as i32,
                                 bounding_box.min.y + y as i32,
-                                color as u8,
+                                color::GRAY(color),
                             );
                         }
                     });

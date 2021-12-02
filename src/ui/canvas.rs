@@ -23,7 +23,7 @@ impl<'a> Canvas<'a> {
         self.bounds
     }
 
-    pub fn write(&mut self, x: i32, y: i32, color: u8) {
+    pub fn write(&mut self, x: i32, y: i32, color: color) {
         let Region {
             top_left,
             bottom_right,
@@ -31,7 +31,7 @@ impl<'a> Canvas<'a> {
         let point = Point2::new(top_left.x + x, top_left.y + y);
         // NB: this impl already contains the bounds check!
         if point.x < bottom_right.x && point.y < bottom_right.y {
-            self.framebuffer.write_pixel(point, color::GRAY(color));
+            self.framebuffer.write_pixel(point, color);
         }
     }
 }
@@ -77,12 +77,18 @@ impl Image {
 
 impl Hash for Image {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        todo!()
+        self.hash.hash(state);
     }
 }
 
 impl Fragment for Image {
     fn draw(&self, canvas: &mut Canvas) {
-        todo!()
+        for (x, y, pixel) in self.data.enumerate_pixels() {
+            canvas.write(
+                x as i32,
+                y as i32,
+                color::RGB(pixel.data[0], pixel.data[1], pixel.data[2]),
+            )
+        }
     }
 }

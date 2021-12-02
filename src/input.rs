@@ -187,7 +187,7 @@ impl State {
                     // TODO: this but better: maybe discard slow touches, or invalidate any
                     // that overlap with the pen.
                     if self.tool_distance == Distance::Far
-                        && now.duration_since(self.last_ink) > Duration::from_millis(250)
+                        && now.duration_since(self.last_ink) > Duration::from_millis(500)
                     {
                         self.fingers
                             .insert(finger.tracking_id, finger.pos.map(|p| p as f32));

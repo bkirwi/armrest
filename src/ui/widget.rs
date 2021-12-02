@@ -26,6 +26,10 @@ pub struct View<'a, M> {
 }
 
 impl<'a, M> View<'a, M> {
+    pub fn size(&self) -> Vector2<i32> {
+        self.frame.size()
+    }
+
     pub fn handlers(&mut self) -> Handlers<M> {
         Handlers {
             input: self.input,
@@ -62,6 +66,23 @@ pub struct Handlers<'a, M> {
 impl<M> Handlers<'_, M> {
     pub fn relative(&mut self, region: Region) -> &mut Self {
         self.region = region.translate(self.origin.to_vec());
+        self
+    }
+
+    /// Expand the region uniformly until it's at least the given size along each axis.
+    pub fn min_size(&mut self, size: Vector2<i32>) -> &mut Self {
+        let current_size = self.region.size();
+        let pad_x = (size.x - current_size.x).max(0);
+        let pad_y = (size.y - current_size.y).max(0);
+        let top_left = Point2 {
+            x: self.region.top_left.x - pad_x / 2,
+            y: self.region.top_left.y - pad_y / 2,
+        };
+        let bottom_right = Point2 {
+            x: top_left.x + current_size.x.max(size.x),
+            y: top_left.y + current_size.y.max(size.y),
+        };
+        self.region = Region::new(top_left, bottom_right);
         self
     }
 
