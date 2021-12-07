@@ -1,11 +1,11 @@
 use crate::geom::Region;
 use crate::ink::Ink;
 use crate::ui::ContentHash;
+use image::RgbImage;
 use libremarkable::cgmath::Point2;
 use libremarkable::framebuffer::common::color;
 use libremarkable::framebuffer::core::Framebuffer;
 use libremarkable::framebuffer::{FramebufferDraw, FramebufferIO};
-use libremarkable::image::RgbImage;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
@@ -84,11 +84,8 @@ impl Hash for Image {
 impl Fragment for Image {
     fn draw(&self, canvas: &mut Canvas) {
         for (x, y, pixel) in self.data.enumerate_pixels() {
-            canvas.write(
-                x as i32,
-                y as i32,
-                color::RGB(pixel.data[0], pixel.data[1], pixel.data[2]),
-            )
+            let data = pixel.0;
+            canvas.write(x as i32, y as i32, color::RGB(data[0], data[1], data[2]));
         }
     }
 }
