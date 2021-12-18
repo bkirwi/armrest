@@ -1,4 +1,5 @@
 .cargo
+Cargo.lock
 .venv
 .ipynb_checkpoints
 data

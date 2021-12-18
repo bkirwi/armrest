@@ -3,6 +3,7 @@ use crate::ink::Ink;
 use crate::ml::{Beam, LanguageModel, RecognizerThread};
 use crate::ui::{Frame, Handlers, View, Void, Widget};
 use libremarkable::cgmath::Vector2;
+use std::borrow::Borrow;
 
 type RecognizedText = Vec<(String, f32)>;
 
@@ -61,8 +62,9 @@ impl<T: Widget<Message = Void>, LM> Widget for InkArea<T, LM> {
     }
 
     fn render(&self, mut view: View<Self::Message>) {
-        view.frame.push_annotation(&self.ink);
-        view.handlers().on_ink(InkMsg::Inked)
+        view.frame.annotate(&self.ink);
+        view.handlers().on_ink(InkMsg::Inked);
+        self.widget.borrow().void().render(view);
     }
 }
 

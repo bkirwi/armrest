@@ -16,20 +16,13 @@ pub enum Tool {
     Rubber,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq)]
-enum Distance {
-    Far,
-    Near,
-    Down,
-}
-
 pub struct State {
     ink: Ink,
     ink_start: Instant,
     last_ink: Instant,
     last_event: Instant,
-    current_tool: Tool,
-    tool_distance: Distance,
+    current_tool: Option<Tool>,
+    tool_distance: u16,
     last_pen_point: Option<Point2<i32>>,
     fingers: HashMap<i32, Point2<f32>>,
 }
@@ -86,27 +79,28 @@ impl State {
             ink_start: Instant::now(),
             last_ink: Instant::now(),
             last_event: Instant::now(),
-            current_tool: Tool::Pen,
-            tool_distance: Distance::Far,
+            current_tool: None,
+            tool_distance: u16::MAX,
             last_pen_point: None,
             fingers: HashMap::new(),
         }
     }
 
     fn pen_near(&mut self, pen: Tool, entering: bool) -> Option<Gesture> {
-        self.current_tool = pen;
-
-        self.tool_distance = if entering {
-            Distance::Near
-        } else {
-            Distance::Far
-        };
-
-        // TODO: some assertions
-        if entering || self.ink.len() == 0 {
+        if entering {
+            if self.current_tool != Some(pen) {
+                // Dang!
+                self.ink.clear();
+            }
+            self.current_tool = Some(pen);
             None
         } else {
-            Some(Gesture::Ink(pen))
+            self.current_tool = None;
+            if self.ink.len() > 0 {
+                Some(Gesture::Ink(pen))
+            } else {
+                None
+            }
         }
     }
 
@@ -140,13 +134,10 @@ impl State {
                     WacomPen::ToolPen => self.pen_near(Tool::Pen, entering),
                     WacomPen::ToolRubber => self.pen_near(Tool::Rubber, entering),
                     WacomPen::Touch => {
-                        self.tool_distance = if entering {
-                            Distance::Down
-                        } else {
-                            Distance::Near
-                        };
-                        if !entering {
+                        if entering {
                             self.last_pen_point = None;
+                            self.tool_distance = 0;
+                        } else {
                             self.ink.pen_up();
                         }
                         None
@@ -156,48 +147,60 @@ impl State {
                         None
                     }
                 },
-                WacomEvent::Hover { .. } => None,
+                WacomEvent::Hover {
+                    distance, position, ..
+                } => {
+                    self.tool_distance = distance;
+                    // TODO: helps, but not very principled... maybe something based on current handlers?
+                    let big_lift = self.tool_distance > 50;
+                    let long_vertical_move = self
+                        .last_pen_point
+                        .map_or(false, |p| (p.y as f32 - position.y).abs() > 80.0);
+                    if (big_lift || long_vertical_move) && self.ink.len() > 0 {
+                        self.current_tool.map(|t| Gesture::Ink(t))
+                    } else {
+                        None
+                    }
+                }
                 WacomEvent::Draw {
                     position,
                     pressure: _,
                     tilt: _,
-                } => match self.tool_distance {
-                    Distance::Down => {
-                        self.last_ink = now;
+                } => {
+                    self.tool_distance = 0;
 
-                        let current_point = position.map(|x| x as i32);
-                        let last_point =
-                            mem::replace(&mut self.last_pen_point, Some(current_point));
-                        self.ink.push(
-                            position.x,
-                            position.y,
-                            now.duration_since(self.ink_start).as_secs_f32(),
-                        );
-                        last_point
-                            .map(|last| Gesture::Stroke(self.current_tool, last, current_point))
-                    }
-                    _ => None,
-                },
+                    self.last_ink = now;
+                    let was_empty = self.ink.len() == 0;
+
+                    let current_point = position.map(|x| x as i32);
+                    let last_point = mem::replace(&mut self.last_pen_point, Some(current_point));
+                    self.ink.push(
+                        position.x,
+                        position.y,
+                        now.duration_since(self.ink_start).as_secs_f32(),
+                    );
+                    last_point.filter(|_| !was_empty).and_then(|last| {
+                        self.current_tool
+                            .map(|tool| Gesture::Stroke(tool, last, current_point))
+                    })
+                }
                 WacomEvent::Unknown => None,
             },
             InputEvent::MultitouchEvent { event } => match event {
                 MultitouchEvent::Press { finger } => {
-                    // This avoids a false touch from the palm when you just finish
-                    // drawing and lift the hand.
-                    // TODO: this but better: maybe discard slow touches, or invalidate any
-                    // that overlap with the pen.
-                    if self.tool_distance == Distance::Far
-                        && now.duration_since(self.last_ink) > Duration::from_millis(500)
-                    {
-                        self.fingers
-                            .insert(finger.tracking_id, finger.pos.map(|p| p as f32));
-                    }
+                    self.fingers
+                        .insert(finger.tracking_id, finger.pos.map(|p| p as f32));
                     None
                 }
                 MultitouchEvent::Release { finger } => {
                     if let Some(start) = self.fingers.remove(&finger.tracking_id) {
                         let end = finger.pos.map(|p| p as f32);
-                        if self.tool_distance == Distance::Far {
+                        // This avoids a false touch from the palm when you just finish
+                        // drawing and lift the hand.
+                        // TODO: this still misses some palm
+                        let allowed = self.current_tool == None
+                            && self.last_ink + Duration::from_millis(500) < now;
+                        if allowed {
                             Some(Gesture::Tap(Touch { start, end }))
                         } else {
                             None

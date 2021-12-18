@@ -4,6 +4,7 @@ extern crate lazy_static;
 use std::borrow::Borrow;
 use std::io::Write;
 use std::sync::mpsc;
+use std::time::Instant;
 use std::{fs, thread};
 
 use libremarkable::cgmath::{ElementWise, EuclideanSpace, Point2};
@@ -37,7 +38,7 @@ struct Demo {
     header_text: Text,
     prompt: Text,
     handwriting: Component<InkArea<Draw<Line>, bool>>,
-    results: Vec<Text>,
+    results: Vec<(Text, Text)>,
 }
 
 impl Widget for Demo {
@@ -66,12 +67,34 @@ impl Widget for Demo {
             .map(Msg::RecognizedText)
             .render_split(&mut view, Side::Top, 0.0);
 
-        for result in &self.results {
-            result
+        let text_width = self
+            .results
+            .iter()
+            .map(|(l, _)| l.size().x)
+            .max()
+            .unwrap_or(0);
+
+        let mut text_col = view.split_off(Side::Left, text_width + 40);
+        for (label, _) in &self.results {
+            label
+                .borrow()
+                .void()
+                .render_split(&mut text_col, Side::Top, 0.0);
+        }
+        text_col.leave_rest_blank();
+
+        let start = Instant::now();
+
+        for (_, score) in &self.results {
+            score
                 .borrow()
                 .void()
                 .render_split(&mut view, Side::Top, 0.0)
         }
+
+        let end = Instant::now();
+
+        dbg!(end - start);
     }
 }
 
@@ -84,8 +107,9 @@ impl Applet for Demo {
                 self.results.clear();
 
                 for (s, f) in items {
-                    let text = Text::literal(40, &*ROMAN, &format!("{}: {:.1}%", s, f * 100.0));
-                    self.results.push(text)
+                    let label = Text::literal(40, &*ROMAN, &s);
+                    let result = Text::literal(40, &*ROMAN, &format!("{:.1}%", f * 100.0));
+                    self.results.push((label, result))
                 }
             }
             Msg::Clear => {

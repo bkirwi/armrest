@@ -63,7 +63,7 @@ struct Entry {
     id: usize,
     checked: bool,
     check: Ink,
-    label: Ink,
+    label: Vec<Ink>,
 }
 
 impl Entry {
@@ -71,8 +71,8 @@ impl Entry {
         Entry {
             id,
             checked: false,
-            check: Default::default(),
-            label: Default::default(),
+            check: Ink::new(),
+            label: vec![],
         }
     }
 
@@ -110,7 +110,9 @@ impl Widget for Entry {
             checkbox: false,
             ink,
         });
-        view.annotate(&self.label);
+        for i in &self.label {
+            view.annotate(i);
+        }
         view.draw(&Line { y: 80 });
     }
 }
@@ -165,7 +167,7 @@ impl Applet for TodoApp {
                         entry.check.append(ink, 1.0);
                         entry.checked = true;
                     } else {
-                        entry.label.append(ink, 1.0);
+                        entry.label.push(ink);
                     }
                 }
             }
@@ -217,7 +219,7 @@ fn main() {
             id: i,
             checked: false,
             check: Ink::new(),
-            label: Ink::new(),
+            label: vec![],
         })
     }
 

@@ -20,7 +20,7 @@ impl Side {
     }
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Region {
     pub top_left: Point2<i32>,
     pub bottom_right: Point2<i32>,
@@ -44,6 +44,11 @@ impl Region {
         Region::new(only, only)
     }
 
+    pub fn area(&self) -> i32 {
+        let size = self.size();
+        size.x * size.y
+    }
+
     pub fn translate(&self, vec: Vector2<i32>) -> Region {
         Region {
             top_left: self.top_left + vec,
@@ -57,7 +62,7 @@ impl Region {
                 if value >= self.top_left.x {
                     Some(Region::new(
                         self.top_left,
-                        Point2::new(value, self.bottom_right.y),
+                        Point2::new(value.min(self.bottom_right.x), self.bottom_right.y),
                     ))
                 } else {
                     None
@@ -66,7 +71,7 @@ impl Region {
             Side::Right => {
                 if value <= self.bottom_right.x {
                     Some(Region::new(
-                        Point2::new(value, self.top_left.y),
+                        Point2::new(value.max(self.top_left.x), self.top_left.y),
                         self.bottom_right,
                     ))
                 } else {
@@ -77,7 +82,7 @@ impl Region {
                 if value >= self.top_left.y {
                     Some(Region::new(
                         self.top_left,
-                        Point2::new(self.bottom_right.x, value),
+                        Point2::new(self.bottom_right.x, value.min(self.bottom_right.y)),
                     ))
                 } else {
                     None
@@ -86,7 +91,7 @@ impl Region {
             Side::Bottom => {
                 if value <= self.bottom_right.y {
                     Some(Region::new(
-                        Point2::new(self.top_left.x, value),
+                        Point2::new(self.top_left.x, value.max(self.top_left.y)),
                         self.bottom_right,
                     ))
                 } else {
@@ -176,5 +181,24 @@ pub trait Regional {
 impl Regional for Region {
     fn region(&self) -> Region {
         *self
+    }
+}
+
+mod test {
+    // split Right, 100 -> Region { top_left: Point2 [100, 127], bottom_right: Point2 [393, 146] }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_split_in_original() {
+        let original = Region {
+            top_left: Point2::new(377, 127),
+            bottom_right: Point2::new(393, 146),
+        };
+        let split = original.split(Side::Right, 100);
+        assert_eq!(split, Some(original));
     }
 }

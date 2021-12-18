@@ -20,7 +20,7 @@ use std::any::TypeId;
 use std::marker::PhantomData;
 
 pub struct View<'a, M> {
-    pub(crate) input: &'a Option<Action>,
+    pub(crate) input: Option<&'a Action>,
     pub(crate) messages: &'a mut Vec<M>,
     pub(crate) frame: Frame<'a>,
 }
@@ -48,16 +48,20 @@ impl<'a, M> View<'a, M> {
     }
 
     pub fn annotate(&mut self, ink: &Ink) {
-        self.frame.push_annotation(ink);
+        self.frame.annotate(ink);
     }
 
     pub fn draw(self, fragment: &impl Fragment) {
         self.frame.draw_fragment(fragment);
     }
+
+    pub fn leave_rest_blank(self) {
+        // A custom mem::drop, for readability.
+    }
 }
 
 pub struct Handlers<'a, M> {
-    input: &'a Option<Action>,
+    input: Option<&'a Action>,
     messages: &'a mut Vec<M>,
     region: Region,
     origin: Point2<i32>,
@@ -87,7 +91,7 @@ impl<M> Handlers<'_, M> {
     }
 
     pub fn on_swipe(&mut self, to_edge: Side, message: M) {
-        if let Some(a) = &self.input {
+        if let Some(a) = self.input {
             if let Action::Touch(t) = a {
                 let center = t.midpoint();
                 if t.to_swipe() == Some(to_edge) && self.region.contains(center.map(|f| f as i32)) {
@@ -99,7 +103,7 @@ impl<M> Handlers<'_, M> {
 
     /// NB: allows tapping with the pen.
     pub fn on_tap(&mut self, message: M) {
-        if let Some(a) = &self.input {
+        if let Some(a) = self.input {
             match a {
                 Action::Touch(t) => {
                     if t.length() < 20.0 && self.region.contains(t.midpoint().map(|f| f as i32)) {
@@ -121,7 +125,7 @@ impl<M> Handlers<'_, M> {
     }
 
     pub fn on_ink(&mut self, message_fn: impl FnOnce(Ink) -> M) {
-        if let Some(a) = &self.input {
+        if let Some(a) = self.input {
             if let Action::Ink(i) = a {
                 if self.region.contains(i.centroid().map(|f| f as i32)) {
                     let ink = i.clone().translate(-self.origin.to_vec().map(|c| c as f32));

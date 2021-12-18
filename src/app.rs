@@ -3,7 +3,7 @@ use crate::input;
 use crate::input::{Gesture, Tool};
 use crate::ui::{Action, Frame, Handlers, Screen, View, Void, Widget};
 use libremarkable::cgmath::{Point2, Vector2};
-use libremarkable::framebuffer::common::{DISPLAYHEIGHT, DISPLAYWIDTH};
+use libremarkable::framebuffer::common::{color, DISPLAYHEIGHT, DISPLAYWIDTH};
 use libremarkable::framebuffer::core::Framebuffer;
 use libremarkable::framebuffer::FramebufferBase;
 use libremarkable::input::ev::EvDevContext;
@@ -84,7 +84,7 @@ impl App {
         let mut input = None;
         let mut messages = vec![];
         let view = View {
-            input: &input,
+            input: input,
             messages: &mut messages,
             frame: screen.root(),
         };
@@ -108,18 +108,22 @@ impl App {
                 match gestures.on_event(event) {
                     Some(Gesture::Ink(Tool::Pen)) => {
                         let ink = gestures.take_ink();
-                        let bounds = Region::new(
-                            Point2::new(ink.x_range.min as i32, ink.y_range.min as i32),
-                            Point2::new(
-                                ink.x_range.max.ceil() as i32,
-                                ink.y_range.max.ceil() as i32,
-                            ),
-                        );
-                        screen.invalidate(bounds);
+                        let bounds = ink.bounds();
                         Some(Action::Ink(ink))
                     }
+                    Some(Gesture::Ink(Tool::Rubber)) => {
+                        let ink = gestures.take_ink();
+                        // TODO: let apps respond to erase
+                        screen.push_annotation(&ink);
+                        should_update = true;
+                        None
+                    }
                     Some(Gesture::Stroke(Tool::Pen, from, to)) => {
-                        screen.stroke(from, to);
+                        screen.stroke(from, to, 3, color::BLACK);
+                        None
+                    }
+                    Some(Gesture::Stroke(Tool::Rubber, from, to)) => {
+                        screen.stroke(from, to, 16, color::WHITE);
                         None
                     }
                     Some(Gesture::Tap(touch)) => Some(Action::Touch(touch)),
@@ -131,7 +135,7 @@ impl App {
 
             if let Some(a) = action {
                 widget.render(View {
-                    input: &Some(a),
+                    input: Some(&a),
                     messages: &mut messages,
                     frame: screen.root(),
                 });
@@ -139,6 +143,11 @@ impl App {
                 for m in messages.drain(..) {
                     widget.update(m);
                 }
+
+                if let Action::Ink(i) = &a {
+                    screen.push_annotation(i);
+                }
+
                 should_update = true;
             }
 
@@ -154,25 +163,28 @@ impl App {
 
             if should_update {
                 widget.render(View {
-                    input: &None,
+                    input: None,
                     messages: &mut messages,
                     frame: screen.root(),
                 });
                 let render_one_time = Instant::now();
-                if let Some(region) = screen.invalid_annotation.clone() {
-                    screen.invalidate(region);
-                    screen.invalid_annotation = None;
+                let mut fixup_count = 0;
+                while screen.fixup() {
+                    widget.render(View {
+                        input: None,
+                        messages: &mut messages,
+                        frame: screen.root(),
+                    });
+                    fixup_count += 1;
+                    if fixup_count >= 3 {
+                        eprintln!(
+                            "Bad news: the view has not quiesced after three iterations. \
+                        This should be impossible if the view is stable; either the view method \
+                        is non-deterministic, or you've found a bug."
+                        );
+                        break;
+                    }
                 }
-                widget.render(View {
-                    input: &None,
-                    messages: &mut messages,
-                    frame: screen.root(),
-                });
-                widget.render(View {
-                    input: &None,
-                    messages: &mut messages,
-                    frame: screen.root(),
-                });
                 let render_all_time = Instant::now();
                 screen.refresh_changes();
                 should_update = false;
