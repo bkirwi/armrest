@@ -91,7 +91,7 @@ impl Sequence {
         Sequence(0)
     }
 
-    fn get_and_increment(&mut self) -> Sequence {
+    fn fetch_increment(&mut self) -> Sequence {
         let next = Sequence(self.0.wrapping_add(1));
         let current = std::mem::replace(self, next);
         current
@@ -179,7 +179,7 @@ struct AnnotationState {
 type AnnotationMap = HashMap<Annotation, AnnotationState>;
 
 pub struct Screen {
-    fb: Framebuffer<'static>,
+    fb: Framebuffer,
     size: Vector2<i32>,
     sequence: Sequence,
     last_refresh: Sequence,
@@ -188,9 +188,9 @@ pub struct Screen {
 }
 
 impl Screen {
-    pub fn new(fb: Framebuffer<'static>) -> Screen {
+    pub fn new(fb: Framebuffer) -> Screen {
         let mut sequence = Sequence::new();
-        let node = DrawTree::new(sequence.get_and_increment());
+        let node = DrawTree::new(sequence.fetch_increment());
 
         Screen {
             fb,
@@ -208,7 +208,7 @@ impl Screen {
 
     pub fn clear(&mut self) {
         self.annotations.clear();
-        self.node = DrawTree::new(self.sequence.get_and_increment());
+        self.node = DrawTree::new(self.sequence.fetch_increment());
         self.fb.clear();
         full_refresh(&mut self.fb);
     }
@@ -221,11 +221,15 @@ impl Screen {
             let annotation_seq = state.sequence;
             let mut overwritten = false;
             node.visit(annotation.region, |area, draw_seq, content| {
-                if removing && draw_seq.is_before(annotation_seq) {
+                if removing {
+                    // TODO: if the drawn area is newer than the annotation, we _should_ be able to skip.
+                    // ...but that seems to cause bugs somehow.
+                    eprintln!("removed! {:?}", area);
                     *content = INVALID_CONTENT;
                     needs_redraw = true;
                 }
                 if !removing && annotation_seq.is_before(draw_seq) {
+                    eprintln!("overwritten! {:?}", area);
                     overwritten = true;
                 }
             });
@@ -243,21 +247,21 @@ impl Screen {
     pub fn refresh_changes(&mut self) {
         let last_refresh = self.last_refresh;
 
-        let mut stack = vec![];
-        fn push_stack(stack: &mut Vec<Region>, region: Region) {
-            if let Some(&last) = stack.last() {
-                let union = last.union(region);
-                let intersection_area = last.intersect(region).map_or(0, |r| r.area());
-                if union.area() + intersection_area <= last.area() + region.area() {
-                    stack.pop();
-                    push_stack(stack, union);
-                } else {
-                    stack.push(region);
-                }
-            } else {
-                stack.push(region);
-            }
+        let mut stack = None;
+        fn push_stack(stack: &mut Option<Region>, region: Region) {
+            *stack = match *stack {
+                None => Some(region),
+                Some(acc) => Some(acc.union(region)),
+            };
         }
+
+        let fb = &mut self.fb;
+        let full_screen = Region::new(Point2::origin(), Point2::from_vec(self.size));
+        self.node.visit(full_screen, |region, seq, _| {
+            if last_refresh.is_before(seq) {
+                push_stack(&mut stack, region);
+            }
+        });
 
         for (annotation, state) in &self.annotations {
             if state.stale || state.sequence.is_before(last_refresh) {
@@ -266,21 +270,8 @@ impl Screen {
             push_stack(&mut stack, annotation.region);
         }
 
-        let full_screen = Region::new(Point2::origin(), Point2::from_vec(self.size));
-        self.node.visit(full_screen, |region, seq, _| {
-            if last_refresh.is_before(seq) {
-                push_stack(&mut stack, region);
-            }
-        });
-
         for region in stack {
-            // TODO: clean this up into a debugging aid
-            // self.fb.draw_rect(
-            //     region.top_left,
-            //     region.size().map(|c| (c - 2).max(0) as u32),
-            //     2,
-            //     color::GRAY(100),
-            // );
+            eprintln!("refresh-region {:?}", region);
             partial_refresh(&mut self.fb, region.rect());
         }
 
@@ -293,7 +284,8 @@ impl Screen {
                 region: ink.bounds(),
                 content: ink.len() as ContentHash,
             };
-            let sequence = self.sequence.get_and_increment();
+            eprintln!("push-ink {:?}, {:?}", ink.x_range, ink.y_range);
+            let sequence = self.sequence.fetch_increment();
             self.annotations.insert(
                 annotation,
                 AnnotationState {
@@ -327,7 +319,7 @@ impl Screen {
 }
 
 pub struct Frame<'a> {
-    fb: &'a mut Framebuffer<'static>,
+    fb: &'a mut Framebuffer,
     pub(crate) bounds: Region,
     sequence: &'a mut Sequence,
     node: &'a mut DrawTree,
@@ -358,7 +350,7 @@ impl<'a> Frame<'a> {
                 color::WHITE,
             );
             self.node.children.truncate(self.index);
-            self.node.sequence = self.sequence.get_and_increment();
+            self.node.sequence = self.sequence.fetch_increment();
             self.node.content = 0;
             self.content = 0;
         }
@@ -379,9 +371,10 @@ impl<'a> Frame<'a> {
                 .entry(annotation)
                 .and_modify(|state| state.stale = false)
                 .or_insert_with(|| {
+                    eprintln!("push-ink {:?}, {:?}", ink.x_range, ink.y_range);
                     draw_ink(fb, top_left, ink);
                     AnnotationState {
-                        sequence: sequence.get_and_increment(),
+                        sequence: sequence.fetch_increment(),
                         stale: false,
                     }
                 });
@@ -395,7 +388,7 @@ impl<'a> Frame<'a> {
             self.truncate();
             self.content = hash;
             self.node.content = hash;
-            self.node.sequence = self.sequence.get_and_increment();
+            self.node.sequence = self.sequence.fetch_increment();
             draw_fn(Canvas {
                 framebuffer: self.fb,
                 bounds: self.bounds,

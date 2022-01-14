@@ -136,7 +136,7 @@ impl<M> Handlers<'_, M> {
     }
 }
 
-// TODO: unify with the input event type
+// TODO: unify with the input event type, or the input struct itself?
 #[derive(Debug, Clone)]
 pub enum Action {
     Touch(Touch),

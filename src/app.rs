@@ -22,6 +22,18 @@ impl<M> Sender<M> {
         let _ = self.event.send(message);
         let _ = self.wakeup.send(InputEvent::Unknown {});
     }
+
+    pub fn subcomponent<T: Applet>(&self, f: impl FnOnce(Sender<T::Message>) -> T) -> Component<T> {
+        let (tx, rx) = mpsc::channel();
+        let widget = f(Sender {
+            wakeup: self.wakeup.clone(),
+            event: tx,
+        });
+        Component {
+            rx,
+            applet: RefCell::new(widget),
+        }
+    }
 }
 
 impl<M> Clone for Sender<M> {
@@ -78,7 +90,7 @@ impl App {
     pub fn run<W: Widget + Applet>(&mut self, component: &mut Component<W>) {
         let Component { rx, applet } = component;
         let widget = applet.get_mut();
-        let mut screen = Screen::new(Framebuffer::from_path("/dev/fb0"));
+        let mut screen = Screen::new(Framebuffer::new());
         screen.clear();
 
         let mut input = None;
@@ -238,6 +250,11 @@ impl<T: Applet> Component<T> {
     pub fn get_mut(&mut self) -> &mut T {
         self.applet.get_mut()
     }
+
+    // TODO: prove this safe?
+    // pub fn borrowing<A>(&self, f: impl FnOnce(&T) -> A) -> A {
+    //     f(&*self.applet.borrow())
+    // }
 }
 
 impl<T: Applet> Widget for Component<T> {
@@ -266,9 +283,13 @@ impl<T: Applet> Widget for Component<T> {
             nested_messages.push(message);
         }
 
-        for message in nested_messages {
-            if let Some(m) = self.applet.borrow_mut().update(message) {
-                messages.push(m);
+        // Normally, this shouldn't be borrowed already.
+        // If it is, there's some
+        if let Ok(mut borrowed) = self.applet.try_borrow_mut() {
+            for message in nested_messages {
+                if let Some(m) = borrowed.update(message) {
+                    messages.push(m);
+                }
             }
         }
     }

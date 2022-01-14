@@ -13,15 +13,6 @@ use libremarkable::cgmath::{ElementWise, EuclideanSpace, Point2};
 use libremarkable::framebuffer::common::{color, DISPLAYHEIGHT, DISPLAYWIDTH};
 use libremarkable::framebuffer::FramebufferDraw;
 
-#[derive(Clone, Debug)]
-enum Msg {
-    HeaderInk { ink: Ink },
-    TodoInk { id: usize, checkbox: bool, ink: Ink },
-    Uncheck { id: usize },
-    Sort,
-    Clear,
-}
-
 #[derive(Hash)]
 struct Checkbox {
     checked: bool,
@@ -59,6 +50,15 @@ impl Fragment for Line {
     }
 }
 
+#[derive(Clone, Debug)]
+enum Msg {
+    HeaderInk { ink: Ink },
+    TodoInk { id: usize, checkbox: bool, ink: Ink },
+    Uncheck { id: usize },
+    Sort,
+    Clear,
+}
+
 struct Entry {
     id: usize,
     checked: bool,
@@ -90,9 +90,8 @@ impl Widget for Entry {
     }
 
     fn render(&self, mut view: View<Msg>) {
-        let mut check_area = view.split_off(Side::Left, 210);
-
         // Draw the checkbox area
+        let mut check_area = view.split_off(Side::Left, 210);
         check_area.handlers().on_ink(|ink| Msg::TodoInk {
             id: self.id,
             checkbox: true,

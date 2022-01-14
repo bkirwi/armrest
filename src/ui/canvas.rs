@@ -10,12 +10,12 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
 pub struct Canvas<'a> {
-    pub(crate) framebuffer: &'a mut Framebuffer<'static>,
+    pub(crate) framebuffer: &'a mut Framebuffer,
     pub(crate) bounds: Region,
 }
 
 impl<'a> Canvas<'a> {
-    pub fn framebuffer(&mut self) -> &mut Framebuffer<'static> {
+    pub fn framebuffer(&mut self) -> &mut Framebuffer {
         self.framebuffer
     }
 

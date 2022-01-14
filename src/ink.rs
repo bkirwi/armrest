@@ -84,7 +84,10 @@ impl Ink {
 
     pub fn bounds(&self) -> Region {
         Region::new(
-            Point2::new(self.x_range.min as i32, self.y_range.min as i32),
+            Point2::new(
+                self.x_range.min.floor() as i32,
+                self.y_range.min.floor() as i32,
+            ),
             Point2::new(
                 self.x_range.max.ceil() as i32,
                 self.y_range.max.ceil() as i32,
