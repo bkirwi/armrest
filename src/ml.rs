@@ -482,54 +482,6 @@ fn beam_decode(
     result
 }
 
-pub struct RecognizerThread {
-    sender: mpsc::Sender<(Ink, Box<dyn FnOnce(&[f32]) + Send>)>,
-}
-
-impl Default for RecognizerThread {
-    fn default() -> Self {
-        RecognizerThread::spawn()
-    }
-}
-
-impl RecognizerThread {
-    pub fn spawn() -> Self {
-        RecognizerThread::spawn_from(Recognizer::new().unwrap())
-    }
-
-    pub fn spawn_from(mut recognizer: Recognizer<'static, Spline>) -> RecognizerThread {
-        let (sender, receiver): (
-            mpsc::Sender<(Ink, Box<dyn FnOnce(&[f32]) + Send>)>,
-            mpsc::Receiver<(Ink, Box<dyn FnOnce(&[f32]) + Send>)>,
-        ) = mpsc::channel();
-
-        let _thread = thread::spawn(move || {
-            for (ink, output) in receiver {
-                let raw = recognizer.recognize(&ink, &RawOutput).unwrap();
-                output(&raw)
-            }
-        });
-
-        RecognizerThread { sender }
-    }
-
-    pub fn recognize_async<O: ModelOutput + Send + 'static>(
-        &self,
-        ink: Ink,
-        output: O,
-        callback: impl FnOnce(O::Out) + Send + 'static,
-    ) {
-        self.sender
-            .send((
-                ink,
-                Box::new(move |buffer| {
-                    callback(output.read_from(buffer));
-                }),
-            ))
-            .unwrap()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
