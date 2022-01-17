@@ -5,7 +5,9 @@ authors = ["Ben Kirwin <ben@kirw.in>"]
 edition = "2018"
 
 [dependencies]
-libremarkable = { version = "0.5.0", path = "../libremarkable", default-features = false, features = ['framebuffer']}
+#libremarkable = { version = "0.5.0", path = "../libremarkable", default-features = false, features = ['framebuffer']}
+libremarkable = { version = "0.5.0", git = "https://github.com/canselcik/libremarkable", rev = "76d19c7cbd186ab44e8026604a7bf94c26d7bfed", default-features = false, features = ['framebuffer'] }
+
 tflite = { git = "https://github.com/bkirwi/tflite-rs", rev = "7d5a0d8a51378313dbe017c32299a51e002c06b5" }
 #tflite = { path = "../tflite-rs" }
 flo_curves = "0.4.1"
