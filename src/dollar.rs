@@ -2,6 +2,7 @@ use crate::ink::Ink;
 use crate::math;
 use libremarkable::cgmath::{EuclideanSpace, InnerSpace, MetricSpace, Point2, Vector2};
 use rusttype::point;
+use std::collections::BTreeSet;
 
 const N_POINTS: usize = 32;
 
@@ -89,25 +90,24 @@ impl Points {
     }
 
     pub fn cloud_distance(&self, template: &Points, start: usize) -> f32 {
-        let mut matched = [false; N_POINTS];
+        // NB: I'd be a bit surprised if this is truly faster, but following the book for now.
+        let mut unmatched = (0..N_POINTS).collect::<BTreeSet<_>>();
         let mut sum = 0.0;
+        let mut weight = N_POINTS as f32;
         for loop_index in 0..N_POINTS {
             let i = (loop_index + start) % N_POINTS;
             let mut min = f32::INFINITY;
             let mut index = 0;
-            for j in 0..N_POINTS {
-                if matched[j] {
-                    continue;
-                }
-                let d = self.0[i].distance(template.0[j]);
+            for j in unmatched.iter().copied() {
+                let d = self.0[i].distance2(template.0[j]);
                 if d < min {
                     min = d;
                     index = j;
                 }
             }
-            matched[index] = true;
-            let weight = 1.0 - loop_index as f32 / N_POINTS as f32;
+            unmatched.remove(&index);
             sum += weight * min;
+            weight -= 1.0;
         }
         sum
     }
