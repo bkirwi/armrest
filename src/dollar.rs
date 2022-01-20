@@ -102,6 +102,7 @@ impl Points {
                 let d = self.0[i].distance(template.0[j]);
                 if d < min {
                     min = d;
+                    index = j;
                 }
             }
             matched[index] = true;
