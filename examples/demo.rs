@@ -15,9 +15,10 @@ use rusttype::Font;
 
 use armrest::app;
 use armrest::app::{App, Applet, Component, Sender};
+use armrest::dollar::Points;
 use armrest::geom::Regional;
 use armrest::ink::Ink;
-use armrest::ml::{Beam, Recognizer, RecognizerThread};
+use armrest::ml::{Beam, Recognizer, Spline};
 use armrest::ui::{Canvas, Draw, Fragment, Frame, Handlers, Line, Side, Text, View, Void, Widget};
 
 lazy_static! {
@@ -27,23 +28,38 @@ lazy_static! {
     };
 }
 
+const HEADER_HEIGHT: i32 = 200;
+const PAGE_HEIGHT: i32 = DISPLAYHEIGHT as i32 - HEADER_HEIGHT;
+const PAGE_WIDTH: i32 = DISPLAYWIDTH as i32 - 200;
+
 #[derive(Clone)]
 enum Msg {
     Inked(Ink),
+    InkedTemplate(Ink, usize, usize),
     RecognizedText(Vec<(String, f32)>),
     Clear,
+    ClearTemplate(usize, usize),
+    Tab(Tab),
 }
 
-struct Input {
+#[derive(Clone)]
+enum Tab {
+    Handwriting,
+    Gestures,
+}
+
+struct Handwriting {
+    prompt: Text<Msg>,
     ink: Ink,
     sender: mpsc::Sender<Ink>,
+    results: Vec<(Text, Text)>,
 }
 
-impl Input {
-    fn new(sender: Sender<Msg>) -> Input {
+impl Handwriting {
+    fn new(sender: Sender<Msg>) -> Handwriting {
         let (tx, rx) = mpsc::channel::<Ink>();
 
-        let mut recognizer = Recognizer::new().unwrap();
+        let mut recognizer: Recognizer<Spline> = Recognizer::new().unwrap();
 
         thread::spawn(move || {
             for ink in rx {
@@ -61,58 +77,35 @@ impl Input {
             }
         });
 
-        Input {
+        let prompt = Text::builder(40, &*ROMAN)
+            .words("Write your text below. ")
+            .message(Msg::Clear)
+            .words("Tap here to clear.")
+            .into_text();
+
+        Self {
+            prompt,
             ink: Ink::new(),
             sender: tx,
+            results: vec![],
         }
     }
 }
 
-impl Widget for Input {
+impl Widget for Handwriting {
     type Message = Msg;
 
     fn size(&self) -> Vector2<i32> {
-        Vector2::new(DISPLAYWIDTH as i32, 200)
+        Vector2::new(PAGE_WIDTH, PAGE_HEIGHT)
     }
 
     fn render(&self, mut view: View<Self::Message>) {
-        view.handlers().on_ink(Msg::Inked);
-        view.annotate(&self.ink);
-        view.draw(&Line { y: 100 });
-    }
-}
+        self.prompt.render_split(&mut view, Side::Top, 0.0);
 
-struct Demo {
-    header_text: Text,
-    prompt: Text,
-    handwriting: Input,
-    results: Vec<(Text, Text)>,
-}
-
-impl Widget for Demo {
-    type Message = Msg;
-
-    fn size(&self) -> Vector2<i32> {
-        Vector2::new(DISPLAYWIDTH as i32, DISPLAYHEIGHT as i32)
-    }
-
-    fn render<'a>(&'a self, mut view: View<Msg>) {
-        view.split_off(Side::Left, 100);
-        view.split_off(Side::Right, 100);
-        let header = view.split_off(Side::Top, 200);
-        self.header_text
-            .borrow()
-            .void()
-            .render_placed(header, 0.0, 0.75);
-
-        self.prompt
-            .borrow()
-            .void()
-            .render_split(&mut view, Side::Top, 0.0);
-
-        self.handwriting
-            .borrow()
-            .render_split(&mut view, Side::Top, 0.0);
+        let mut ink_area = view.split_off(Side::Top, 200);
+        ink_area.handlers().on_ink(Msg::Inked);
+        ink_area.annotate(&self.ink);
+        ink_area.draw(&Line { y: 100 });
 
         let text_width = self
             .results
@@ -130,18 +123,191 @@ impl Widget for Demo {
         }
         text_col.leave_rest_blank();
 
-        let start = Instant::now();
-
         for (_, score) in &self.results {
             score
                 .borrow()
                 .void()
                 .render_split(&mut view, Side::Top, 0.0)
         }
+    }
+}
+#[derive(Hash, Debug)]
+struct GestureBox {
+    coords: Vec<Point2<i32>>,
+}
 
-        let end = Instant::now();
+impl Fragment for GestureBox {
+    fn draw(&self, canvas: &mut Canvas) {
+        let bounds = canvas.bounds();
+        let mut fb = canvas.framebuffer();
+        let center =
+            Point2::from_vec((bounds.top_left.to_vec() + bounds.bottom_right.to_vec()) / 2);
+        let box_size = Vector2::new(100, 100);
+        fb.draw_rect(
+            center - (box_size / 2),
+            box_size.map(|c| c as u32),
+            3,
+            color::GRAY(60),
+        );
+        for c in &self.coords {
+            fb.fill_circle(center + c.to_vec(), 4, color::GRAY(100));
+        }
+    }
+}
 
-        dbg!(end - start);
+struct Gesture {
+    template: Option<(usize, usize)>,
+    ink: Ink,
+    points: Points,
+}
+
+impl Gesture {
+    fn new(template: Option<(usize, usize)>) -> Gesture {
+        let ink = Ink::new();
+        let points = Points::normalize(&ink);
+        Gesture {
+            template,
+            ink,
+            points,
+        }
+    }
+
+    fn push_ink(&mut self, ink: Ink) {
+        self.ink.append(ink, 0.5);
+        self.points = Points::normalize(&self.ink);
+    }
+}
+
+impl Widget for Gesture {
+    type Message = Msg;
+
+    fn size(&self) -> Vector2<i32> {
+        Vector2::new(160, 160)
+    }
+
+    fn render(&self, mut view: View<Self::Message>) {
+        if let Some((t, i)) = self.template {
+            view.handlers().on_ink(|ink| Msg::InkedTemplate(ink, t, i));
+            view.handlers().on_tap(Msg::ClearTemplate(t, i));
+        } else {
+            view.handlers().on_ink(|ink| Msg::Inked(ink));
+            view.handlers().on_tap(Msg::Clear);
+        };
+        view.annotate(&self.ink);
+        let coords = if self.ink.len() == 0 {
+            vec![]
+        } else {
+            self.points
+                .points()
+                .iter()
+                .map(|c| c.map(|c| (c * 100.0) as i32))
+                .collect::<Vec<_>>()
+        };
+        view.draw(&GestureBox { coords });
+    }
+}
+
+struct Gestures {
+    intro: Vec<Text<Msg>>,
+    query: Gesture,
+    templates: Vec<Vec<Gesture>>,
+    best_match: Option<(usize, usize, f32)>,
+}
+
+impl Gestures {
+    fn calculate_best_match(&mut self) {
+        self.best_match = if self.query.ink.len() == 0 {
+            None
+        } else {
+            let mut candidates = vec![];
+            let mut coordinates = vec![];
+            for (i, gestures) in self.templates.iter().enumerate() {
+                for (j, gesture) in gestures.iter().enumerate() {
+                    if gesture.ink.len() > 0 {
+                        candidates.push(gesture.points.clone());
+                        coordinates.push((i, j));
+                    }
+                }
+            }
+            if candidates.len() == 0 {
+                None
+            } else {
+                let (result, score) = self.query.points.recognize(&candidates);
+                let (i, j) = coordinates[result];
+                Some((i, j, score))
+            }
+        }
+    }
+}
+
+impl Widget for Gestures {
+    type Message = Msg;
+
+    fn size(&self) -> Vector2<i32> {
+        Vector2::new(PAGE_WIDTH, PAGE_HEIGHT)
+    }
+
+    fn render(&self, mut view: View<Self::Message>) {
+        for l in &self.intro {
+            l.render_split(&mut view, Side::Top, 0.0)
+        }
+
+        let mut query_area = view.split_off(Side::Top, 160);
+        self.query.render_split(&mut query_area, Side::Left, 0.5);
+        if let Some((i, j, _)) = self.best_match {
+            let label = Text::literal(40, &*ROMAN, "Best match: ");
+            label.render_split(&mut query_area, Side::Left, 0.5);
+            let best = &self.templates[i][j];
+            query_area.annotate(&best.ink);
+        }
+        query_area.leave_rest_blank();
+
+        for template_type in self.templates.iter() {
+            let mut row = view.split_off(Side::Top, 160);
+            for t in template_type {
+                t.render_split(&mut row, Side::Left, 0.0);
+            }
+        }
+    }
+}
+
+struct Demo {
+    header_text: Text,
+    tabs: Vec<Text<Msg>>,
+    current_tab: Tab,
+    handwriting: Handwriting,
+    gesture: Gestures,
+}
+
+impl Widget for Demo {
+    type Message = Msg;
+
+    fn size(&self) -> Vector2<i32> {
+        Vector2::new(DISPLAYWIDTH as i32, DISPLAYHEIGHT as i32)
+    }
+
+    fn render<'a>(&'a self, mut view: View<Msg>) {
+        view.split_off(Side::Left, 100);
+        view.split_off(Side::Right, 100);
+        let mut header = view.split_off(Side::Top, 200);
+        self.header_text
+            .borrow()
+            .void()
+            .render_split(&mut header, Side::Left, 0.7);
+        for tab in &self.tabs {
+            header.split_off(Side::Left, 40);
+            tab.render_split(&mut header, Side::Left, 0.7);
+        }
+        header.leave_rest_blank();
+
+        match self.current_tab {
+            Tab::Handwriting => {
+                self.handwriting.render(view);
+            }
+            Tab::Gestures => {
+                self.gesture.render(view);
+            }
+        }
     }
 }
 
@@ -151,20 +317,58 @@ impl Applet for Demo {
     fn update(&mut self, msg: Self::Message) -> Option<()> {
         match msg {
             Msg::RecognizedText(items) => {
-                self.results.clear();
+                self.handwriting.results.clear();
 
                 for (s, f) in items {
                     let label = Text::literal(40, &*ROMAN, &s);
                     let result = Text::literal(40, &*ROMAN, &format!("{:.1}%", f * 100.0));
-                    self.results.push((label, result))
+                    self.handwriting.results.push((label, result))
                 }
             }
-            Msg::Clear => {
-                self.results.clear();
-                self.handwriting.ink.clear();
+            Msg::Clear => match self.current_tab {
+                Tab::Handwriting => {
+                    self.handwriting.results.clear();
+                    self.handwriting.ink.clear();
+                }
+                Tab::Gestures => {
+                    self.gesture.query = Gesture::new(None);
+                    self.gesture.calculate_best_match();
+                }
+            },
+            Msg::ClearTemplate(i, j) => {
+                self.gesture.templates[i][j] = Gesture::new(Some((i, j)));
+                self.gesture.calculate_best_match();
             }
-            Msg::Inked(ink) => {
-                self.handwriting.ink.append(ink, 0.5);
+            Msg::Inked(ink) => match self.current_tab {
+                Tab::Handwriting => {
+                    self.handwriting.ink.append(ink, 0.5);
+                    self.handwriting.sender.send(self.handwriting.ink.clone());
+                }
+                Tab::Gestures => {
+                    let gesture = &mut self.gesture.query;
+                    gesture.push_ink(ink);
+                    self.gesture.calculate_best_match();
+                }
+            },
+            Msg::InkedTemplate(ink, i, j) => {
+                let gesture = &mut self.gesture.templates[i][j];
+                gesture.push_ink(ink);
+                self.gesture.calculate_best_match();
+
+                let gesture_count = self.gesture.templates.len();
+                if i + 1 == gesture_count && gesture_count < 6 {
+                    self.gesture
+                        .templates
+                        .push(vec![Gesture::new(Some((i + 1, 0)))]);
+                }
+
+                let template_count = self.gesture.templates[i].len();
+                if j + 1 == template_count && template_count < 6 {
+                    self.gesture.templates[i].push(Gesture::new(Some((i, j + 1))));
+                }
+            }
+            Msg::Tab(t) => {
+                self.current_tab = t;
             }
         }
         None
@@ -174,10 +378,48 @@ impl Applet for Demo {
 fn main() {
     let mut app = App::new();
 
+    fn tab_text(s: &str, tab: Tab) -> Text<Msg> {
+        Text::builder(40, &*ROMAN)
+            .message(Msg::Tab(tab))
+            .literal(s)
+            .into_text()
+    }
+
+    let tabs = vec![
+        tab_text("handwriting", Tab::Handwriting),
+        tab_text("gestures", Tab::Gestures),
+    ];
+
+    let gesture_intro = Text::builder(40, &*ROMAN)
+        .words("The 'dollar' module implements the $P-family of gesture recognizers.")
+        .wrap(PAGE_WIDTH, true);
+
     app.run(&mut Component::with_sender(app.wakeup(), |s| Demo {
-        header_text: Text::literal(60, &*ROMAN, "Armrest demo app"),
-        prompt: Text::literal(40, &*ROMAN, "Write your text below. Tap to clear."),
-        handwriting: Input::new(s),
-        results: vec![],
+        header_text: Text::literal(60, &*ROMAN, "armrest demo"),
+        tabs,
+        current_tab: Tab::Handwriting,
+        handwriting: Handwriting::new(s),
+        gesture: Gestures {
+            intro: gesture_intro,
+            query: {
+                let ink = Ink::new();
+                let points = Points::normalize(&ink);
+                Gesture {
+                    template: None,
+                    ink,
+                    points,
+                }
+            },
+            templates: vec![vec![{
+                let ink = Ink::new();
+                let points = Points::normalize(&ink);
+                Gesture {
+                    template: Some((0, 0)),
+                    ink,
+                    points,
+                }
+            }]],
+            best_match: None,
+        },
     }));
 }

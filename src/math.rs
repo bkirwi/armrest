@@ -2,7 +2,7 @@ use crate::ink::Ink;
 use libremarkable::cgmath::*;
 use std::cmp::Ordering;
 
-fn xy(p: Point3<f32>) -> Point2<f32> {
+pub(crate) fn xy(p: Point3<f32>) -> Point2<f32> {
     Point2::new(p.x, p.y)
 }
 
