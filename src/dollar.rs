@@ -89,7 +89,7 @@ impl Points {
         result
     }
 
-    pub fn cloud_distance(&self, template: &Points, start: usize) -> f32 {
+    fn cloud_distance(&self, template: &Points, start: usize, min_so_far: f32) -> f32 {
         // NB: I'd be a bit surprised if this is truly faster, but following the book for now.
         let mut unmatched = (0..N_POINTS).collect::<BTreeSet<_>>();
         let mut sum = 0.0;
@@ -108,7 +108,12 @@ impl Points {
             unmatched.remove(&index);
             sum += weight * min;
             weight -= 1.0;
+
+            if sum > min_so_far {
+                return sum;
+            }
         }
+
         sum
     }
 
@@ -118,13 +123,12 @@ impl Points {
         for (i, template) in templates.iter().enumerate() {
             // inlined greedy_cloud_match here
             let step = (N_POINTS as f32).sqrt() as usize;
-            let mut min = f32::INFINITY;
+            let mut min = score;
             for offset in (0..N_POINTS).step_by(step) {
-                let d1 = self.cloud_distance(template, offset);
-                let d2 = template.cloud_distance(self, offset);
-                min = min.min(d1).min(d2);
+                min = self.cloud_distance(template, offset, min).min(min);
+                min = template.cloud_distance(self, offset, min).min(min);
             }
-            if score > min {
+            if min < score {
                 score = min;
                 best = i;
             }
