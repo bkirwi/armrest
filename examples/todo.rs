@@ -13,6 +13,8 @@ use libremarkable::cgmath::{ElementWise, EuclideanSpace, Point2};
 use libremarkable::framebuffer::common::{color, DISPLAYHEIGHT, DISPLAYWIDTH};
 use libremarkable::framebuffer::FramebufferDraw;
 
+const NUM_CHECKS: usize = 16;
+
 #[derive(Hash)]
 struct Checkbox {
     checked: bool,
@@ -86,7 +88,7 @@ impl Widget for Entry {
     type Message = Msg;
 
     fn size(&self) -> Vector2<i32> {
-        Vector2::new(DISPLAYWIDTH as i32, 100)
+        Vector2::new(DISPLAYWIDTH as i32, 98)
     }
 
     fn render(&self, mut view: View<Msg>) {
@@ -132,15 +134,15 @@ impl Widget for TodoApp {
     }
 
     fn render(&self, mut view: View<Msg>) {
-        let mut head = view.split_off(Side::Top, 220);
+        let mut head = view.split_off(Side::Top, 240);
         head.annotate(&self.header);
         head.handlers().on_ink(|ink| Msg::HeaderInk { ink });
 
         {
-            let mut menu = head.split_off(Side::Top, 180);
-            menu.split_off(Side::Right, 40);
+            let mut menu = head.split_off(Side::Top, 160);
+            menu.split_off(Side::Right, 60);
             self.sort_button.render_split(&mut menu, Side::Right, 1.0);
-            menu.split_off(Side::Right, 80);
+            menu.split_off(Side::Right, 60);
             self.clear_button.render_split(&mut menu, Side::Right, 1.0);
         }
 
@@ -184,7 +186,7 @@ impl Applet for TodoApp {
             }
         }
 
-        while self.entries.len() % 15 != 0 {
+        while self.entries.len() % NUM_CHECKS != 0 {
             let id = self.next_entry_id;
             self.next_entry_id += 1;
             self.entries.push(Entry::new(id));
@@ -198,22 +200,22 @@ fn main() {
     let mut app = app::App::new();
 
     let font: Font<'static> = {
-        let font_bytes = fs::read("/usr/share/fonts/ttf/noto/NotoSans-Regular.ttf").unwrap();
+        let font_bytes = fs::read("/usr/share/fonts/ttf/noto/NotoSans-Bold.ttf").unwrap();
         Font::from_bytes(font_bytes).unwrap()
     };
 
-    let sort_button = Text::builder(40, &font)
+    let sort_button = Text::builder(30, &font)
         .message(Msg::Sort)
         .words("sort")
         .into_text();
 
-    let clear_button = Text::builder(40, &font)
+    let clear_button = Text::builder(30, &font)
         .message(Msg::Clear)
         .words("clear checked")
         .into_text();
 
     let mut entries = vec![];
-    for i in 0..15 {
+    for i in 0..NUM_CHECKS {
         entries.push(Entry {
             id: i,
             checked: false,
@@ -224,7 +226,7 @@ fn main() {
 
     let mut widget = TodoApp {
         header: Ink::new(),
-        next_entry_id: 15,
+        next_entry_id: NUM_CHECKS,
         sort_button,
         clear_button,
         entries,
