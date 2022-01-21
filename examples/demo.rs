@@ -35,10 +35,10 @@ const PAGE_WIDTH: i32 = DISPLAYWIDTH as i32 - 200;
 #[derive(Clone)]
 enum Msg {
     Inked(Ink),
-    InkedTemplate(Ink, usize, usize),
+    InkedTemplate(Ink, usize),
     RecognizedText(Vec<(String, f32)>),
     Clear,
-    ClearTemplate(usize, usize),
+    ClearTemplate(usize),
     Tab(Tab),
 }
 
@@ -156,13 +156,13 @@ impl Fragment for GestureBox {
 }
 
 struct Gesture {
-    template: Option<(usize, usize)>,
+    template: Option<usize>,
     ink: Ink,
     points: Points,
 }
 
 impl Gesture {
-    fn new(template: Option<(usize, usize)>) -> Gesture {
+    fn new(template: Option<usize>) -> Gesture {
         let ink = Ink::new();
         let points = Points::normalize(&ink);
         Gesture {
@@ -186,9 +186,9 @@ impl Widget for Gesture {
     }
 
     fn render(&self, mut view: View<Self::Message>) {
-        if let Some((t, i)) = self.template {
-            view.handlers().on_ink(|ink| Msg::InkedTemplate(ink, t, i));
-            view.handlers().on_tap(Msg::ClearTemplate(t, i));
+        if let Some(i) = self.template {
+            view.handlers().on_ink(|ink| Msg::InkedTemplate(ink, i));
+            view.handlers().on_tap(Msg::ClearTemplate(i));
         } else {
             view.handlers().on_ink(|ink| Msg::Inked(ink));
             view.handlers().on_tap(Msg::Clear);
@@ -210,8 +210,9 @@ impl Widget for Gesture {
 struct Gestures {
     intro: Vec<Text<Msg>>,
     query: Gesture,
-    templates: Vec<Vec<Gesture>>,
-    best_match: Option<(usize, usize, f32)>,
+    prompt: Vec<Text<Msg>>,
+    templates: Vec<Gesture>,
+    best_match: Option<(usize, f32)>,
 }
 
 impl Gestures {
@@ -221,20 +222,18 @@ impl Gestures {
         } else {
             let mut candidates = vec![];
             let mut coordinates = vec![];
-            for (i, gestures) in self.templates.iter().enumerate() {
-                for (j, gesture) in gestures.iter().enumerate() {
-                    if gesture.ink.len() > 0 {
-                        candidates.push(gesture.points.clone());
-                        coordinates.push((i, j));
-                    }
+            for (i, gesture) in self.templates.iter().enumerate() {
+                if gesture.ink.len() > 0 {
+                    candidates.push(gesture.points.clone());
+                    coordinates.push(i);
                 }
             }
             if candidates.len() == 0 {
                 None
             } else {
                 let (result, score) = self.query.points.recognize(&candidates);
-                let (i, j) = coordinates[result];
-                Some((i, j, score))
+                let i = coordinates[result];
+                Some((i, score))
             }
         }
     }
@@ -254,17 +253,21 @@ impl Widget for Gestures {
 
         let mut query_area = view.split_off(Side::Top, 160);
         self.query.render_split(&mut query_area, Side::Left, 0.5);
-        if let Some((i, j, _)) = self.best_match {
+        if let Some((i, _)) = self.best_match {
             let label = Text::literal(40, &*ROMAN, "Best match: ");
             label.render_split(&mut query_area, Side::Left, 0.5);
-            let best = &self.templates[i][j];
+            let best = &self.templates[i];
             query_area.annotate(&best.ink);
         }
         query_area.leave_rest_blank();
 
-        for template_type in self.templates.iter() {
+        for l in &self.prompt {
+            l.render_split(&mut view, Side::Top, 0.0)
+        }
+
+        for gesture_row in self.templates.chunks(6) {
             let mut row = view.split_off(Side::Top, 160);
-            for t in template_type {
+            for t in gesture_row {
                 t.render_split(&mut row, Side::Left, 0.0);
             }
         }
@@ -335,8 +338,8 @@ impl Applet for Demo {
                     self.gesture.calculate_best_match();
                 }
             },
-            Msg::ClearTemplate(i, j) => {
-                self.gesture.templates[i][j] = Gesture::new(Some((i, j)));
+            Msg::ClearTemplate(i) => {
+                self.gesture.templates[i] = Gesture::new(Some(i));
                 self.gesture.calculate_best_match();
             }
             Msg::Inked(ink) => match self.current_tab {
@@ -350,21 +353,14 @@ impl Applet for Demo {
                     self.gesture.calculate_best_match();
                 }
             },
-            Msg::InkedTemplate(ink, i, j) => {
-                let gesture = &mut self.gesture.templates[i][j];
+            Msg::InkedTemplate(ink, i) => {
+                let gesture = &mut self.gesture.templates[i];
                 gesture.push_ink(ink);
                 self.gesture.calculate_best_match();
 
-                let gesture_count = self.gesture.templates.len();
-                if i + 1 == gesture_count && gesture_count < 6 {
-                    self.gesture
-                        .templates
-                        .push(vec![Gesture::new(Some((i + 1, 0)))]);
-                }
-
-                let template_count = self.gesture.templates[i].len();
-                if j + 1 == template_count && template_count < 6 {
-                    self.gesture.templates[i].push(Gesture::new(Some((i, j + 1))));
+                let template_count = self.gesture.templates.len();
+                if i + 1 == template_count && template_count < 40 {
+                    self.gesture.templates.push(Gesture::new(Some(i + 1)));
                 }
             }
             Msg::Tab(t) => {
@@ -386,21 +382,43 @@ fn main() {
     }
 
     let tabs = vec![
-        tab_text("handwriting", Tab::Handwriting),
         tab_text("gestures", Tab::Gestures),
+        tab_text("handwriting", Tab::Handwriting),
     ];
 
     let gesture_intro = Text::builder(40, &*ROMAN)
-        .words("The 'dollar' module implements the $P-family of gesture recognizers.")
-        .wrap(PAGE_WIDTH, true);
+        .words(
+            "Armrest's 'dollar' module is an implementation of the $P gesture recognizer:q
+            given a list of 'template' gestures and a 'query' gesture,
+            it'll find the template that's most similar to the query.
+            It's useful when you want to recognize a symbol the user has drawn,
+            like a box or the letter 'A'.
+            (For recognizing longer strings of text, the ",
+        )
+        .message(Msg::Tab(Tab::Handwriting))
+        .words("handwriting recognition")
+        .no_message()
+        .words(" system is often more accurate.)")
+        .wrap(PAGE_WIDTH, false);
+
+    let gesture_prompt = Text::builder(40, &*ROMAN)
+        .words(
+            "Start by drawing your templates into the squares below.
+            Draw a gesture in the square above,
+            and the $P algorithm will find the closest match.
+            Tap a square to clear it.
+            You may want to draw a few copies of each template for better accuracy.",
+        )
+        .wrap(PAGE_WIDTH, false);
 
     app.run(&mut Component::with_sender(app.wakeup(), |s| Demo {
         header_text: Text::literal(60, &*ROMAN, "armrest demo"),
         tabs,
-        current_tab: Tab::Handwriting,
+        current_tab: Tab::Gestures,
         handwriting: Handwriting::new(s),
         gesture: Gestures {
             intro: gesture_intro,
+            prompt: gesture_prompt,
             query: {
                 let ink = Ink::new();
                 let points = Points::normalize(&ink);
@@ -410,15 +428,15 @@ fn main() {
                     points,
                 }
             },
-            templates: vec![vec![{
+            templates: vec![{
                 let ink = Ink::new();
                 let points = Points::normalize(&ink);
                 Gesture {
-                    template: Some((0, 0)),
+                    template: Some(0),
                     ink,
                     points,
                 }
-            }]],
+            }],
             best_match: None,
         },
     }));
