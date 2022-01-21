@@ -408,7 +408,7 @@ impl<'a, M> TextBuilder<'a, M> {
             }
 
             for (s, _, e, _, _) in &mut current_input {
-                assert!(*s > index);
+                assert!(*s >= index);
                 assert!(*e > index);
                 *s -= index;
                 *e -= index;
