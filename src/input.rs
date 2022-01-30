@@ -56,7 +56,7 @@ impl Touch {
     }
 
     pub fn to_swipe(&self) -> Option<Side> {
-        if self.length() < 100.0 {
+        if self.length() < 80.0 {
             return None;
         }
 
@@ -89,7 +89,6 @@ impl State {
     fn pen_near(&mut self, pen: Tool, entering: bool) -> Option<Gesture> {
         if entering {
             if self.current_tool != Some(pen) {
-                // Dang!
                 self.ink.clear();
             }
             self.current_tool = Some(pen);
@@ -134,12 +133,7 @@ impl State {
                     WacomPen::ToolPen => self.pen_near(Tool::Pen, entering),
                     WacomPen::ToolRubber => self.pen_near(Tool::Rubber, entering),
                     WacomPen::Touch => {
-                        if entering {
-                            self.last_pen_point = None;
-                            self.tool_distance = 0;
-                        } else {
-                            self.ink.pen_up();
-                        }
+                        self.tool_distance = if entering { 0 } else { 1 };
                         None
                     }
                     WacomPen::Stylus | WacomPen::Stylus2 => {
@@ -150,7 +144,13 @@ impl State {
                 WacomEvent::Hover {
                     distance, position, ..
                 } => {
-                    self.tool_distance = distance;
+                    if distance < 5 {
+                        eprintln!("Not really hovering: {} {:?}", distance, position);
+                    }
+
+                    self.ink.pen_up();
+                    self.tool_distance = distance.max(1);
+
                     // TODO: helps, but not very principled... maybe something based on current handlers?
                     let big_lift = self.tool_distance > 50;
                     let long_vertical_move = self
@@ -167,22 +167,29 @@ impl State {
                     pressure: _,
                     tilt: _,
                 } => {
-                    self.tool_distance = 0;
+                    if self.tool_distance != 0 {
+                        eprintln!("Spurious draw event at point: {:?}", position);
+                        None
+                    } else {
+                        self.last_ink = now;
+                        let was_empty = {
+                            let len = self.ink.len();
+                            len == 0 || self.ink.is_pen_up(len - 1)
+                        };
 
-                    self.last_ink = now;
-                    let was_empty = self.ink.len() == 0;
-
-                    let current_point = position.map(|x| x as i32);
-                    let last_point = mem::replace(&mut self.last_pen_point, Some(current_point));
-                    self.ink.push(
-                        position.x,
-                        position.y,
-                        now.duration_since(self.ink_start).as_secs_f32(),
-                    );
-                    last_point.filter(|_| !was_empty).and_then(|last| {
-                        self.current_tool
-                            .map(|tool| Gesture::Stroke(tool, last, current_point))
-                    })
+                        let current_point = position.map(|x| x as i32);
+                        let last_point =
+                            mem::replace(&mut self.last_pen_point, Some(current_point));
+                        self.ink.push(
+                            position.x,
+                            position.y,
+                            now.duration_since(self.ink_start).as_secs_f32(),
+                        );
+                        last_point.filter(|_| !was_empty).and_then(|last| {
+                            self.current_tool
+                                .map(|tool| Gesture::Stroke(tool, last, current_point))
+                        })
+                    }
                 }
                 WacomEvent::Unknown => None,
             },

@@ -388,7 +388,7 @@ fn main() {
 
     let gesture_intro = Text::builder(40, &*ROMAN)
         .words(
-            "Armrest's 'dollar' module is an implementation of the $P gesture recognizer:q
+            "Armrest's 'dollar' module is an implementation of the $P gesture recognizer:
             given a list of 'template' gestures and a 'query' gesture,
             it'll find the template that's most similar to the query.
             It's useful when you want to recognize a symbol the user has drawn,

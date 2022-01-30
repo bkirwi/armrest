@@ -106,14 +106,14 @@ impl<M> Handlers<'_, M> {
         if let Some(a) = self.input {
             match a {
                 Action::Touch(t) => {
-                    if t.length() < 20.0 && self.region.contains(t.midpoint().map(|f| f as i32)) {
+                    if t.length() < 40.0 && self.region.contains(t.midpoint().map(|f| f as i32)) {
                         self.messages.push(message);
                     }
                 }
                 Action::Ink(i) if i.len() > 0 => {
                     let size = i.bounds().size();
-                    if size.x < 20
-                        && size.y < 20
+                    if size.x < 40
+                        && size.y < 40
                         && self.region.contains(i.centroid().map(|f| f as i32))
                     {
                         self.messages.push(message);
