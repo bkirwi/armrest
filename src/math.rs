@@ -43,7 +43,7 @@ pub(crate) fn douglas_peucker(data: &Ink, distance: f32) -> Ink {
             let p1 = stroke[end];
             let inner = ((start + 1)..end)
                 .map(|i| (i, point_segment_distance2(xy(p0), xy(p1), xy(stroke[i]))))
-                .max_by(|(_, d0), (_, d1)| d0.partial_cmp(&d1).unwrap_or(Ordering::Equal));
+                .max_by(|(_, d0), (_, d1)| d0.partial_cmp(d1).unwrap_or(Ordering::Equal));
 
             match inner {
                 Some((split, d)) if d > distance2 => {
@@ -80,7 +80,7 @@ pub(crate) fn hausdorff_distance(a: &[Point3<f32>], b: &[Point3<f32>]) -> f32 {
             }
             min_dist2
         })
-        .max_by(|d0, d1| d0.partial_cmp(&d1).unwrap_or(Ordering::Equal))
+        .max_by(|d0, d1| d0.partial_cmp(d1).unwrap_or(Ordering::Equal))
         .unwrap_or(0.0)
         .sqrt()
 }

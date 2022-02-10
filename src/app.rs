@@ -1,11 +1,10 @@
-use crate::geom::Region;
 use crate::input;
 use crate::input::{Gesture, Tool};
-use crate::ui::{Action, Frame, Handlers, Screen, View, Void, Widget};
-use libremarkable::cgmath::{Point2, Vector2};
+use crate::ui::{Action, Screen, View, Widget};
+use libremarkable::cgmath::Vector2;
 use libremarkable::framebuffer::common::{color, DISPLAYHEIGHT, DISPLAYWIDTH};
 use libremarkable::framebuffer::core::Framebuffer;
-use libremarkable::framebuffer::FramebufferBase;
+
 use libremarkable::input::ev::EvDevContext;
 use libremarkable::input::{InputDevice, InputEvent};
 use std::cell::RefCell;
@@ -93,10 +92,10 @@ impl App {
         let mut screen = Screen::new(Framebuffer::new());
         screen.clear();
 
-        let mut input = None;
+        let input = None;
         let mut messages = vec![];
         let view = View {
-            input: input,
+            input,
             messages: &mut messages,
             frame: screen.root(),
         };
@@ -120,7 +119,7 @@ impl App {
                 match gestures.on_event(event) {
                     Some(Gesture::Ink(Tool::Pen)) => {
                         let ink = gestures.take_ink();
-                        let bounds = ink.bounds();
+                        let _bounds = ink.bounds();
                         Some(Action::Ink(ink))
                     }
                     Some(Gesture::Ink(Tool::Rubber)) => {
@@ -264,7 +263,7 @@ impl<T: Applet> Widget for Component<T> {
         self.applet.borrow().size()
     }
 
-    fn render(&self, mut view: View<Self::Message>) {
+    fn render(&self, view: View<Self::Message>) {
         let View {
             input,
             messages,

@@ -2,24 +2,23 @@
 extern crate lazy_static;
 
 use std::borrow::Borrow;
-use std::io::Write;
+
 use std::sync::mpsc;
-use std::time::Instant;
+
 use std::{fs, thread};
 
-use libremarkable::cgmath::{ElementWise, EuclideanSpace, Point2};
+use libremarkable::cgmath::{EuclideanSpace, Point2};
 use libremarkable::framebuffer::cgmath::Vector2;
 use libremarkable::framebuffer::common::{color, DISPLAYHEIGHT, DISPLAYWIDTH};
 use libremarkable::framebuffer::FramebufferDraw;
 use rusttype::Font;
 
-use armrest::app;
 use armrest::app::{App, Applet, Component, Sender};
 use armrest::dollar::Points;
-use armrest::geom::Regional;
+
 use armrest::ink::Ink;
 use armrest::ml::{Beam, Recognizer, Spline};
-use armrest::ui::{Canvas, Draw, Fragment, Frame, Handlers, Line, Side, Text, View, Void, Widget};
+use armrest::ui::{Canvas, Fragment, Line, Side, Text, View, Widget};
 
 lazy_static! {
     static ref ROMAN: Font<'static> = {
@@ -139,7 +138,7 @@ struct GestureBox {
 impl Fragment for GestureBox {
     fn draw(&self, canvas: &mut Canvas) {
         let bounds = canvas.bounds();
-        let mut fb = canvas.framebuffer();
+        let fb = canvas.framebuffer();
         let center =
             Point2::from_vec((bounds.top_left.to_vec() + bounds.bottom_right.to_vec()) / 2);
         let box_size = Vector2::new(100, 100);
@@ -190,7 +189,7 @@ impl Widget for Gesture {
             view.handlers().on_ink(|ink| Msg::InkedTemplate(ink, i));
             view.handlers().on_tap(Msg::ClearTemplate(i));
         } else {
-            view.handlers().on_ink(|ink| Msg::Inked(ink));
+            view.handlers().on_ink(Msg::Inked);
             view.handlers().on_tap(Msg::Clear);
         };
         view.annotate(&self.ink);
@@ -228,7 +227,7 @@ impl Gestures {
                     coordinates.push(i);
                 }
             }
-            if candidates.len() == 0 {
+            if candidates.is_empty() {
                 None
             } else {
                 let (result, score) = self.query.points.recognize(&candidates);

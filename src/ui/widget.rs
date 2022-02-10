@@ -4,20 +4,15 @@ use crate::ink::Ink;
 use crate::input::Touch;
 use libremarkable::cgmath::{EuclideanSpace, Point2, Vector2};
 
-use libremarkable::framebuffer::{FramebufferDraw, FramebufferIO};
+use libremarkable::framebuffer::FramebufferDraw;
 
-use std::collections::hash_map::DefaultHasher;
 use std::fmt::Debug;
-use std::hash::{Hash, Hasher};
+use std::hash::Hasher;
 
 use std::ops::{Deref, DerefMut};
 
-use crate::ui::canvas::{Canvas, Fragment, Image};
-use crate::ui::{ContentHash, Frame};
-use libremarkable::framebuffer::common::color;
-use libremarkable::image::{GrayImage, RgbImage};
-use std::any::TypeId;
-use std::marker::PhantomData;
+use crate::ui::canvas::{Fragment, Image};
+use crate::ui::Frame;
 
 pub struct View<'a, M> {
     pub(crate) input: Option<&'a Action>,
@@ -224,7 +219,7 @@ where
 
     fn render(&self, view: View<Self::Message>) {
         let mut nested = vec![];
-        let mut nested_view: View<T::Message> = View {
+        let nested_view: View<T::Message> = View {
             input: view.input,
             messages: &mut nested,
             frame: view.frame,

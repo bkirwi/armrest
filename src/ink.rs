@@ -58,12 +58,10 @@ impl fmt::Display for Ink {
         for (i, point) in self.points.iter().enumerate() {
             let sep = if i + 1 == self.len() {
                 ""
+            } else if self.is_pen_up(i) {
+                ";"
             } else {
-                if self.is_pen_up(i) {
-                    ";"
-                } else {
-                    ","
-                }
+                ","
             };
             write!(f, "{:.4} {:.4} {:.4}{}", point.x, point.y, point.z, sep)?;
         }
@@ -171,10 +169,10 @@ impl Ink {
     pub fn from_string(input: &str) -> Ink {
         let mut ink = Ink::new();
 
-        for stroke in input.split(";") {
-            for point in stroke.split(",") {
+        for stroke in input.split(';') {
+            for point in stroke.split(',') {
                 let mut coords = point
-                    .split(" ")
+                    .split(' ')
                     .map(|s| s.parse::<f32>().expect("non-float entry in ink literal"));
                 ink.push(
                     coords.next().unwrap(),
@@ -217,7 +215,7 @@ impl Ink {
         for point in self.points.iter_mut() {
             point.x = (point.x - self.x_range.min) * ink_scale;
             point.y = (point.y - self.y_range.min) * ink_scale;
-            point.z = point.z - self.t_range.min;
+            point.z -= self.t_range.min;
         }
     }
 

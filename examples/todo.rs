@@ -8,8 +8,8 @@ use armrest::ink::Ink;
 
 use armrest::app::{Applet, Component};
 use armrest::ui::canvas::{Canvas, Fragment};
-use armrest::ui::{Frame, Handlers, Side, Text, View, Widget};
-use libremarkable::cgmath::{ElementWise, EuclideanSpace, Point2};
+use armrest::ui::{Side, Text, View, Widget};
+use libremarkable::cgmath::Point2;
 use libremarkable::framebuffer::common::{color, DISPLAYHEIGHT, DISPLAYWIDTH};
 use libremarkable::framebuffer::FramebufferDraw;
 
@@ -79,7 +79,7 @@ impl Entry {
     }
 
     fn sort_key(&self) -> impl Ord {
-        let blank = self.label.len() == 0 && self.check.len() == 0;
+        let blank = self.label.is_empty() && self.check.len() == 0;
         (blank, self.checked)
     }
 }
@@ -224,7 +224,7 @@ fn main() {
         })
     }
 
-    let mut widget = TodoApp {
+    let widget = TodoApp {
         header: Ink::new(),
         next_entry_id: NUM_CHECKS,
         sort_button,

@@ -1,5 +1,5 @@
 use crate::geom::Region;
-use crate::ui::{Frame, Handlers, Regional, View, Void, Widget};
+use crate::ui::{View, Void, Widget};
 use itertools::Itertools;
 use libremarkable::cgmath::{Point2, Vector2};
 use libremarkable::framebuffer::common::color;
@@ -375,7 +375,7 @@ impl<'a, M> TextBuilder<'a, M> {
             let split_index = self
                 .on_input
                 .iter()
-                .position(|(_, _, end_offset, _, _)| !(*end_offset < end_index))
+                .position(|(_, _, end_offset, _, _)| *end_offset >= end_index)
                 .unwrap_or(self.on_input.len());
 
             let mut current_input = self.on_input.split_off(split_index);

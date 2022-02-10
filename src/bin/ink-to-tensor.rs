@@ -13,7 +13,7 @@ fn main() {
     let args: Vec<_> = std::env::args().skip(1).collect();
 
     while let Some(Ok(line)) = lines.next() {
-        let mut halves = line.split("\t");
+        let mut halves = line.split('\t');
         let expected = halves.next().unwrap();
         let points = halves.next().unwrap();
 

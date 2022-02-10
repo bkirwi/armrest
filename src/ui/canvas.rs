@@ -1,6 +1,5 @@
 use crate::geom::Region;
-use crate::ink::Ink;
-use crate::ui::ContentHash;
+
 use image::RgbImage;
 use libremarkable::cgmath::Point2;
 use libremarkable::framebuffer::common::color;

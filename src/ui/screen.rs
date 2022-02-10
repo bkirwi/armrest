@@ -1,17 +1,17 @@
 use crate::geom::{Region, Regional, Side};
 use crate::ink::Ink;
 use crate::ui::canvas::{Canvas, Fragment};
-use libremarkable::cgmath::{ElementWise, EuclideanSpace, Point2, Vector2};
+use libremarkable::cgmath::{EuclideanSpace, Point2, Vector2};
 use libremarkable::framebuffer::common::{
     color, display_temp, dither_mode, mxcfb_rect, waveform_mode, DISPLAYHEIGHT, DISPLAYWIDTH,
     DRAWING_QUANT_BIT,
 };
 use libremarkable::framebuffer::core::Framebuffer;
 use libremarkable::framebuffer::refresh::PartialRefreshMode;
-use libremarkable::framebuffer::{FramebufferDraw, FramebufferIO, FramebufferRefresh};
+use libremarkable::framebuffer::{FramebufferDraw, FramebufferRefresh};
 use std::any::TypeId;
 use std::collections::hash_map::DefaultHasher;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 
 /// Refresh the entire screen, including a flash to clear ghosting.
@@ -58,7 +58,7 @@ pub fn draw_ink(fb: &mut Framebuffer, origin: Point2<i32>, ink: &Ink) {
     let offset = origin - Point2::origin();
     for stroke in ink.strokes() {
         let mut last = &stroke[0];
-        for point in &stroke[..] {
+        for point in stroke {
             fb.draw_line(
                 Point2::new(last.x, last.y).map(|c| c as i32) + offset,
                 Point2::new(point.x, point.y).map(|c| c as i32) + offset,
@@ -93,8 +93,8 @@ impl Sequence {
 
     fn fetch_increment(&mut self) -> Sequence {
         let next = Sequence(self.0.wrapping_add(1));
-        let current = std::mem::replace(self, next);
-        current
+
+        std::mem::replace(self, next)
     }
 
     fn is_before(&self, other: Sequence) -> bool {
@@ -255,7 +255,7 @@ impl Screen {
             };
         }
 
-        let fb = &mut self.fb;
+        let _fb = &mut self.fb;
         let full_screen = Region::new(Point2::origin(), Point2::from_vec(self.size));
         self.node.visit(full_screen, |region, seq, _| {
             if last_refresh.is_before(seq) {
@@ -396,7 +396,7 @@ impl<'a> Frame<'a> {
         }
     }
 
-    pub(crate) fn draw_fragment<F: Fragment>(mut self, fragment: &F) {
+    pub(crate) fn draw_fragment<F: Fragment>(self, fragment: &F) {
         let mut hasher = DefaultHasher::new();
         TypeId::of::<F>().hash(&mut hasher);
         fragment.hash(&mut hasher);
@@ -434,7 +434,7 @@ impl<'a> Frame<'a> {
         let split_bounds = self
             .bounds
             .split(side, split_value)
-            .expect(&format!("Unable to split: {:?}/{}", side, offset));
+            .unwrap_or_else(|| panic!("Unable to split: {:?}/{}", side, offset));
         let remaining_bounds = self.bounds.split(side.opposite(), split_value).unwrap();
         self.bounds = remaining_bounds;
 

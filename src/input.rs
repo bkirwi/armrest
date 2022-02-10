@@ -158,7 +158,7 @@ impl State {
                         .last_pen_point
                         .map_or(false, |p| (p.y as f32 - position.y).abs() > 80.0);
                     if (big_lift || long_vertical_move) && self.ink.len() > 0 {
-                        self.current_tool.map(|t| Gesture::Ink(t))
+                        self.current_tool.map(Gesture::Ink)
                     } else {
                         None
                     }

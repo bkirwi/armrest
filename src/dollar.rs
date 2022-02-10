@@ -1,7 +1,7 @@
 use crate::ink::Ink;
 use crate::math;
-use libremarkable::cgmath::{EuclideanSpace, InnerSpace, MetricSpace, Point2, Vector2};
-use rusttype::point;
+use libremarkable::cgmath::{EuclideanSpace, MetricSpace, Point2, Vector2};
+
 use std::collections::BTreeSet;
 
 const N_POINTS: usize = 32;

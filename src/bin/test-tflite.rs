@@ -87,13 +87,13 @@ fn main() {
     let mut global_err = 0f32;
     let mut count = 0;
     while let Some(Ok(line)) = lines.next() {
-        let mut halves = line.split("\t");
+        let mut halves = line.split('\t');
         let expected = halves.next().unwrap();
         let points = halves.next().unwrap();
 
         let mut ink = vec![];
-        for point_str in points.split(",") {
-            for part in point_str.split(" ") {
+        for point_str in points.split(',') {
+            for part in point_str.split(' ') {
                 ink.push(part.parse::<f32>().unwrap());
             }
         }
