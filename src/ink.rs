@@ -3,6 +3,8 @@ use libremarkable::cgmath::{InnerSpace, MetricSpace, Point2, Point3, Vector2, Ve
 use std::collections::BTreeSet;
 use std::fmt;
 
+use serde::ser::SerializeSeq;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::ops::AddAssign;
 
 #[derive(Debug, Copy, Clone)]
@@ -68,6 +70,22 @@ impl fmt::Display for Ink {
             write!(f, "{:.4} {:.4} {:.4}{}", point.x, point.y, point.z, sep)?;
         }
         Ok(())
+    }
+}
+
+impl Serialize for Ink {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(&self)
+    }
+}
+
+impl<'a> Deserialize<'a> for Ink {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'a>,
+    {
+        let result: String = Deserialize::deserialize(deserializer)?;
+        Ok(Ink::from_string(&result))
     }
 }
 
@@ -170,6 +188,10 @@ impl Ink {
 
     pub fn from_string(input: &str) -> Ink {
         let mut ink = Ink::new();
+
+        if input.is_empty() {
+            return ink;
+        }
 
         for stroke in input.split(";") {
             for point in stroke.split(",") {

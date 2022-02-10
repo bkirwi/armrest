@@ -180,11 +180,19 @@ impl State {
                         let current_point = position.map(|x| x as i32);
                         let last_point =
                             mem::replace(&mut self.last_pen_point, Some(current_point));
-                        self.ink.push(
-                            position.x,
-                            position.y,
-                            now.duration_since(self.ink_start).as_secs_f32(),
-                        );
+
+                        let time = now.duration_since(self.ink_start).as_secs_f32();
+                        // TODO: just a little bit of debouncing here, removing points that are
+                        // close in space and time to the previous one.
+                        // Need to: write last point before lift always;
+                        // return something on initial pen down (so we don't skip drawing dots)1
+                        // if let Some(p) = self.ink.points.last() {
+                        //     if Point2::new(p.x, p.y).distance2(position) < 1.0 {
+                        //         return None;
+                        //     }
+                        // }
+
+                        self.ink.push(position.x, position.y, time);
                         last_point.filter(|_| !was_empty).and_then(|last| {
                             self.current_tool
                                 .map(|tool| Gesture::Stroke(tool, last, current_point))
