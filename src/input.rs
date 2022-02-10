@@ -118,6 +118,7 @@ impl State {
     pub fn on_event(&mut self, event: InputEvent) -> Option<Gesture> {
         let mut now = Instant::now();
         if now.duration_since(self.last_event) > Duration::from_secs(15) {
+            eprintln!("Long interval since last input event; clearing state.");
             *self = State::new();
             now = self.last_event;
         }
@@ -134,6 +135,10 @@ impl State {
                     WacomPen::ToolRubber => self.pen_near(Tool::Rubber, entering),
                     WacomPen::Touch => {
                         self.tool_distance = if entering { 0 } else { 1 };
+                        if self.current_tool.is_none() {
+                            eprintln!("Strange: got touch event, but current tool is not set! Defaulting to pen.");
+                            self.current_tool = Some(Tool::Pen);
+                        }
                         None
                     }
                     WacomPen::Stylus | WacomPen::Stylus2 => {
@@ -144,10 +149,6 @@ impl State {
                 WacomEvent::Hover {
                     distance, position, ..
                 } => {
-                    if distance < 5 {
-                        eprintln!("Not really hovering: {} {:?}", distance, position);
-                    }
-
                     self.ink.pen_up();
                     self.tool_distance = distance.max(1);
 
