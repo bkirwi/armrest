@@ -1,10 +1,11 @@
-use crate::input;
 use crate::input::{Gesture, Tool};
 use crate::ui::{Action, Screen, View, Widget};
+use crate::{input, math};
 use libremarkable::cgmath::Vector2;
 use libremarkable::framebuffer::common::{color, DISPLAYHEIGHT, DISPLAYWIDTH};
 use libremarkable::framebuffer::core::Framebuffer;
 
+use libremarkable::framebuffer::FramebufferDraw;
 use libremarkable::input::ev::EvDevContext;
 use libremarkable::input::{InputDevice, InputEvent};
 use std::cell::RefCell;
@@ -143,18 +144,24 @@ impl App {
                 match gestures.on_event(event) {
                     Some(Gesture::Ink(Tool::Pen)) => {
                         let ink = gestures.take_ink();
+                        // Simplify the ink before passing it on.
+                        // This makes ~everything else in the code that processes it more efficient,
+                        // but does lose some information, so it's important to be conservative here.
+                        // Someday it might make sense to move more of this into the gesture recognizer?
+                        let ink = math::douglas_peucker(&ink, 1.0);
                         Some(Action::Ink(ink))
                     }
                     Some(Gesture::Ink(Tool::Rubber)) => {
                         let ink = gestures.take_ink();
+                        let ink = math::douglas_peucker(&ink, 1.0);
                         Some(Action::Erase(ink))
                     }
                     Some(Gesture::Stroke(Tool::Pen, from, to)) => {
-                        screen.stroke(from, to, 3, color::BLACK);
+                        screen.quick_draw(|fb| fb.draw_line(from, to, 3, color::BLACK));
                         None
                     }
-                    Some(Gesture::Stroke(Tool::Rubber, from, to)) => {
-                        screen.stroke(from, to, 20, color::WHITE);
+                    Some(Gesture::Stroke(Tool::Rubber, _, to)) => {
+                        screen.quick_draw(|fb| fb.fill_circle(to, 20, color::WHITE));
                         None
                     }
                     Some(Gesture::Tap(touch)) => Some(Action::Touch(touch)),

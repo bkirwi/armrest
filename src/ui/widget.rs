@@ -130,11 +130,15 @@ impl<M> Handlers<'_, M> {
         }
     }
 
+    /// NB: unlike on_ink, this triggers if there's any overlap between the region and the ink.
+    /// This is typically more appropriate for erasing, since if eg. we erase across two nearby regions
+    /// we may want to trigger this for each of the two instead of just the "best match".
     pub fn on_erase(&mut self, message_fn: impl FnOnce(Ink) -> M) {
         if let Some(a) = self.input {
             if let Action::Erase(i) = a {
-                if self.region.contains(i.centroid().map(|f| f as i32)) {
+                if self.region.intersect(i.bounds()).is_some() {
                     let ink = i.clone().translate(-self.origin.to_vec().map(|c| c as f32));
+                    eprintln!("Erasing in region: {:?}", i.bounds());
                     self.messages.push(message_fn(ink));
                 }
             }

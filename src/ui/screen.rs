@@ -227,13 +227,11 @@ impl Screen {
                 // but that seems to bug, and isn't that important for performance.
                 if removing {
                     // && draw_seq.is_before(annotation_seq)
-                    eprintln!("removed! {:?}", area);
                     *content = INVALID_CONTENT;
                     needs_redraw = true;
                 }
                 // Second: if we've redrawn the underlying region, we need to redraw the annotation too.
                 if !removing && annotation_seq.is_before(draw_seq) {
-                    eprintln!("overwritten! {:?}", area);
                     overwritten = true;
                 }
             });
@@ -286,7 +284,6 @@ impl Screen {
                 region: ink.bounds(),
                 content: ink.len() as ContentHash,
             };
-            eprintln!("push-ink {:?}, {:?}", ink.x_range, ink.y_range);
             let sequence = self.sequence.fetch_increment();
             self.annotations.insert(
                 annotation,
@@ -298,8 +295,8 @@ impl Screen {
         }
     }
 
-    pub fn stroke(&mut self, start: Point2<i32>, end: Point2<i32>, width: u32, color: color) {
-        let rect = self.fb.draw_line(start, end, width, color);
+    pub fn quick_draw(&mut self, draw_fn: impl FnOnce(&mut Framebuffer) -> mxcfb_rect) {
+        let rect = draw_fn(&mut self.fb);
         quick_refresh(&mut self.fb, rect);
     }
 
@@ -373,7 +370,6 @@ impl<'a> Frame<'a> {
                 .entry(annotation)
                 .and_modify(|state| state.stale = false)
                 .or_insert_with(|| {
-                    eprintln!("push-ink {:?}, {:?}", ink.x_range, ink.y_range);
                     draw_ink(fb, top_left, ink);
                     AnnotationState {
                         sequence: sequence.fetch_increment(),

@@ -1,5 +1,7 @@
 use std::fs;
+use std::fs::File;
 use std::io::BufReader;
+use std::time::Instant;
 
 use libremarkable::cgmath::Point2;
 use libremarkable::framebuffer::cgmath::Vector2;
@@ -84,6 +86,7 @@ enum Msg {
     HeaderInk { ink: Ink },
     HeaderErase { ink: Ink },
     TodoInk { id: usize, checkbox: bool, ink: Ink },
+    TodoErase { id: usize, checkbox: bool, ink: Ink },
     Uncheck { id: usize },
     Sort,
     Clear,
@@ -128,6 +131,11 @@ impl Widget for Entry {
             checkbox: true,
             ink,
         });
+        check_area.handlers().on_erase(|ink| Msg::TodoErase {
+            id: self.id,
+            checkbox: true,
+            ink,
+        });
         check_area.handlers().on_tap(Msg::Uncheck { id: self.id });
         check_area.annotate(&self.check);
         check_area.draw(&Checkbox {
@@ -142,6 +150,13 @@ impl Widget for Entry {
         });
         for i in &self.label {
             view.annotate(i);
+            view.handlers()
+                .relative(i.bounds())
+                .on_erase(|ink| Msg::TodoErase {
+                    id: self.id,
+                    checkbox: false,
+                    ink,
+                });
         }
         view.draw(&Line { y: 80 });
     }
@@ -187,6 +202,7 @@ impl Applet for TodoApp {
     type Upstream = ();
 
     fn update(&mut self, message: Self::Message) -> Option<()> {
+        let start = Instant::now();
         match message {
             Msg::HeaderInk { ink } => {
                 self.header.append(ink, 1.0);
@@ -204,6 +220,21 @@ impl Applet for TodoApp {
                     }
                 }
             }
+            Msg::TodoErase { id, checkbox, ink } => {
+                if let Some(entry) = self.entries.iter_mut().find(|e| e.id == id) {
+                    if checkbox {
+                        entry.check.clear();
+                        entry.checked = false;
+                    } else {
+                        // TODO: retain_mut whenever that gets stabilized.
+                        for label in &mut entry.label {
+                            label.erase(&ink, 20.0);
+                        }
+                        entry.label.retain(|i| i.len() > 0);
+                    }
+                }
+            }
+
             Msg::Sort => {
                 self.entries.sort_by_key(Entry::sort_key);
             }
@@ -224,12 +255,22 @@ impl Applet for TodoApp {
             self.entries.push(Entry::new(id));
         }
 
-        let json = serde_json::to_string(self).expect("should serialize as json");
-        let state_file = BASE_DIRS
-            .place_data_file(STATE_FILE)
-            .expect("should place data file");
+        let updated = Instant::now();
 
-        fs::write(&state_file, &json).expect("writing state file");
+        let state_path = BASE_DIRS
+            .place_data_file(STATE_FILE)
+            .expect("placing data file");
+
+        let state_file = File::create(state_path).expect("opening data file");
+        serde_json::to_writer(state_file, self).expect("writing data file");
+
+        let written = Instant::now();
+
+        eprintln!(
+            "todo-update update={:?} write={:?}",
+            updated - start,
+            written - updated
+        );
 
         None
     }

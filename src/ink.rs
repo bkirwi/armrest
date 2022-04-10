@@ -1,12 +1,13 @@
-use crate::geom::Region;
-use libremarkable::cgmath::{InnerSpace, MetricSpace, Point2, Point3, Vector2, Vector3};
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::fmt;
-
-use serde::ser::SerializeSeq;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::ops::AddAssign;
+
+use libremarkable::cgmath::{InnerSpace, MetricSpace, Point2, Point3, Vector2, Vector3};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+use crate::geom::Region;
+use crate::math::xy;
 
 #[derive(Debug, Copy, Clone)]
 pub struct Range {
@@ -223,7 +224,7 @@ impl Ink {
         let radius2 = radius * radius;
 
         // To avoid needing N * M comparisons, sort the erasing points so we can query a range
-        let mut eraser_points = eraser.points.clone();
+        let mut eraser_points = eraser.resample(radius / 8.0).points;
         eraser_points.sort_by(|p, q| p.x.partial_cmp(&q.x).unwrap_or(Ordering::Equal));
 
         let mut result = Ink::new();
@@ -237,11 +238,11 @@ impl Ink {
             for p in stroke {
                 let from = binary_search(&eraser_points, p.x - radius);
                 let to = binary_search(&eraser_points, p.x + radius);
-                let erased = eraser_points[from..to]
+                let should_erase = eraser_points[from..to]
                     .iter()
-                    .any(|c| c.distance2(*p) <= radius2);
+                    .any(|c| xy(*c).distance2(xy(*p)) <= radius2);
 
-                if erased {
+                if should_erase {
                     // last point is now effectively the end of a stroke
                     result.pen_up()
                 } else {
