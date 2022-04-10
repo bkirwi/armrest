@@ -1,17 +1,43 @@
 use std::fs;
+use std::io::BufReader;
 
+use libremarkable::cgmath::Point2;
 use libremarkable::framebuffer::cgmath::Vector2;
+use libremarkable::framebuffer::common::{color, DISPLAYHEIGHT, DISPLAYWIDTH};
+use libremarkable::framebuffer::FramebufferDraw;
+use once_cell::sync::Lazy;
 use rusttype::Font;
+use serde::{Deserialize, Serialize};
+use xdg::BaseDirectories;
 
 use armrest::app;
 use armrest::ink::Ink;
-
-use armrest::app::{Applet, Component};
 use armrest::ui::canvas::{Canvas, Fragment};
 use armrest::ui::{Side, Text, View, Widget};
-use libremarkable::cgmath::Point2;
-use libremarkable::framebuffer::common::{color, DISPLAYHEIGHT, DISPLAYWIDTH};
-use libremarkable::framebuffer::FramebufferDraw;
+
+static FONT: Lazy<Font<'static>> = Lazy::new(|| {
+    let font_bytes = fs::read("/usr/share/fonts/ttf/noto/NotoSans-Bold.ttf").unwrap();
+    Font::from_bytes(font_bytes).unwrap()
+});
+
+static SORT_BUTTON: Lazy<Text<Msg>> = Lazy::new(|| {
+    Text::builder(30, &*FONT)
+        .message(Msg::Sort)
+        .words("sort")
+        .into_text()
+});
+
+static CLEAR_BUTTON: Lazy<Text<Msg>> = Lazy::new(|| {
+    Text::builder(30, &*FONT)
+        .message(Msg::Clear)
+        .words("clear checked")
+        .into_text()
+});
+
+static BASE_DIRS: Lazy<BaseDirectories> =
+    Lazy::new(|| BaseDirectories::with_prefix("armrest-todo").unwrap());
+
+const STATE_FILE: &str = "state.json";
 
 const NUM_CHECKS: usize = 16;
 
@@ -61,6 +87,7 @@ enum Msg {
     Clear,
 }
 
+#[derive(Serialize, Deserialize)]
 struct Entry {
     id: usize,
     checked: bool,
@@ -118,11 +145,10 @@ impl Widget for Entry {
     }
 }
 
+#[derive(Serialize, Deserialize)]
 struct TodoApp {
     header: Ink,
     next_entry_id: usize,
-    sort_button: Text<Msg>,
-    clear_button: Text<Msg>,
     entries: Vec<Entry>,
 }
 
@@ -141,9 +167,9 @@ impl Widget for TodoApp {
         {
             let mut menu = head.split_off(Side::Top, 160);
             menu.split_off(Side::Right, 60);
-            self.sort_button.render_split(&mut menu, Side::Right, 1.0);
+            SORT_BUTTON.render_split(&mut menu, Side::Right, 1.0);
             menu.split_off(Side::Right, 60);
-            self.clear_button.render_split(&mut menu, Side::Right, 1.0);
+            CLEAR_BUTTON.render_split(&mut menu, Side::Right, 1.0);
         }
 
         head.draw(&Line { y: 10 });
@@ -192,6 +218,13 @@ impl Applet for TodoApp {
             self.entries.push(Entry::new(id));
         }
 
+        let json = serde_json::to_string(self).expect("should serialize as json");
+        let state_file = BASE_DIRS
+            .place_data_file(STATE_FILE)
+            .expect("should place data file");
+
+        fs::write(&state_file, &json).expect("writing state file");
+
         None
     }
 }
@@ -199,37 +232,28 @@ impl Applet for TodoApp {
 fn main() {
     let mut app = app::App::new();
 
-    let font: Font<'static> = {
-        let font_bytes = fs::read("/usr/share/fonts/ttf/noto/NotoSans-Bold.ttf").unwrap();
-        Font::from_bytes(font_bytes).unwrap()
-    };
+    let widget = match BASE_DIRS.find_data_file(STATE_FILE) {
+        None => {
+            let mut entries = vec![];
+            for i in 0..NUM_CHECKS {
+                entries.push(Entry {
+                    id: i,
+                    checked: false,
+                    check: Ink::new(),
+                    label: vec![],
+                })
+            }
 
-    let sort_button = Text::builder(30, &font)
-        .message(Msg::Sort)
-        .words("sort")
-        .into_text();
-
-    let clear_button = Text::builder(30, &font)
-        .message(Msg::Clear)
-        .words("clear checked")
-        .into_text();
-
-    let mut entries = vec![];
-    for i in 0..NUM_CHECKS {
-        entries.push(Entry {
-            id: i,
-            checked: false,
-            check: Ink::new(),
-            label: vec![],
-        })
-    }
-
-    let widget = TodoApp {
-        header: Ink::new(),
-        next_entry_id: NUM_CHECKS,
-        sort_button,
-        clear_button,
-        entries,
+            TodoApp {
+                header: Ink::new(),
+                next_entry_id: NUM_CHECKS,
+                entries,
+            }
+        }
+        Some(path) => {
+            let file = fs::File::open(path).expect("reading discovered state file");
+            serde_json::from_reader(BufReader::new(file)).expect("parsing json from state file")
+        }
     };
 
     app.run(&mut Component::new(widget))
