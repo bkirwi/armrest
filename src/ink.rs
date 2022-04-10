@@ -1,5 +1,6 @@
 use crate::geom::Region;
 use libremarkable::cgmath::{InnerSpace, MetricSpace, Point2, Point3, Vector2, Vector3};
+use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::fmt;
 
@@ -216,6 +217,41 @@ impl Ink {
             *s = *e;
             Some(slice)
         })
+    }
+
+    pub fn erase(&mut self, eraser: &Ink, radius: f32) {
+        let radius2 = radius * radius;
+
+        // To avoid needing N * M comparisons, sort the erasing points so we can query a range
+        let mut eraser_points = eraser.points.clone();
+        eraser_points.sort_by(|p, q| p.x.partial_cmp(&q.x).unwrap_or(Ordering::Equal));
+
+        let mut result = Ink::new();
+
+        fn binary_search(points: &[Point3<f32>], x: f32) -> usize {
+            points.partition_point(|p| p.x <= x)
+        }
+
+        for stroke in self.strokes() {
+            // TODO: might be nice to remove single-point strokes
+            for p in stroke {
+                let from = binary_search(&eraser_points, p.x - radius);
+                let to = binary_search(&eraser_points, p.x + radius);
+                let erased = eraser_points[from..to]
+                    .iter()
+                    .any(|c| c.distance2(*p) <= radius2);
+
+                if erased {
+                    // last point is now effectively the end of a stroke
+                    result.pen_up()
+                } else {
+                    result.push(p.x, p.y, p.z);
+                }
+            }
+            result.pen_up();
+        }
+
+        *self = result;
     }
 
     // pub fn strokes_mut<'a>(&'a mut self) -> impl Iterator<Item = &'a mut [Point3<f32>]> {

@@ -119,22 +119,18 @@ impl App {
                 match gestures.on_event(event) {
                     Some(Gesture::Ink(Tool::Pen)) => {
                         let ink = gestures.take_ink();
-                        let _bounds = ink.bounds();
                         Some(Action::Ink(ink))
                     }
                     Some(Gesture::Ink(Tool::Rubber)) => {
                         let ink = gestures.take_ink();
-                        // TODO: let apps respond to erase
-                        screen.push_annotation(&ink);
-                        should_update = true;
-                        None
+                        Some(Action::Erase(ink))
                     }
                     Some(Gesture::Stroke(Tool::Pen, from, to)) => {
                         screen.stroke(from, to, 3, color::BLACK);
                         None
                     }
                     Some(Gesture::Stroke(Tool::Rubber, from, to)) => {
-                        screen.stroke(from, to, 16, color::WHITE);
+                        screen.stroke(from, to, 20, color::WHITE);
                         None
                     }
                     Some(Gesture::Tap(touch)) => Some(Action::Touch(touch)),
@@ -156,6 +152,9 @@ impl App {
                 }
 
                 if let Action::Ink(i) = &a {
+                    screen.push_annotation(i);
+                }
+                if let Action::Erase(i) = &a {
                     screen.push_annotation(i);
                 }
 

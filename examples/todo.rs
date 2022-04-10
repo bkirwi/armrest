@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use xdg::BaseDirectories;
 
 use armrest::app;
+use armrest::app::{Applet, Component};
 use armrest::ink::Ink;
 use armrest::ui::canvas::{Canvas, Fragment};
 use armrest::ui::{Side, Text, View, Widget};
@@ -81,6 +82,7 @@ impl Fragment for Line {
 #[derive(Clone, Debug)]
 enum Msg {
     HeaderInk { ink: Ink },
+    HeaderErase { ink: Ink },
     TodoInk { id: usize, checkbox: bool, ink: Ink },
     Uncheck { id: usize },
     Sort,
@@ -163,6 +165,7 @@ impl Widget for TodoApp {
         let mut head = view.split_off(Side::Top, 240);
         head.annotate(&self.header);
         head.handlers().on_ink(|ink| Msg::HeaderInk { ink });
+        head.handlers().on_erase(|ink| Msg::HeaderErase { ink });
 
         {
             let mut menu = head.split_off(Side::Top, 160);
@@ -187,6 +190,9 @@ impl Applet for TodoApp {
         match message {
             Msg::HeaderInk { ink } => {
                 self.header.append(ink, 1.0);
+            }
+            Msg::HeaderErase { ink } => {
+                self.header.erase(&ink, 20.0);
             }
             Msg::TodoInk { id, checkbox, ink } => {
                 if let Some(entry) = self.entries.iter_mut().find(|e| e.id == id) {

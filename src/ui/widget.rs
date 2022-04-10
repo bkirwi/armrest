@@ -129,6 +129,17 @@ impl<M> Handlers<'_, M> {
             }
         }
     }
+
+    pub fn on_erase(&mut self, message_fn: impl FnOnce(Ink) -> M) {
+        if let Some(a) = self.input {
+            if let Action::Erase(i) = a {
+                if self.region.contains(i.centroid().map(|f| f as i32)) {
+                    let ink = i.clone().translate(-self.origin.to_vec().map(|c| c as f32));
+                    self.messages.push(message_fn(ink));
+                }
+            }
+        }
+    }
 }
 
 // TODO: unify with the input event type, or the input struct itself?
@@ -136,6 +147,7 @@ impl<M> Handlers<'_, M> {
 pub enum Action {
     Touch(Touch),
     Ink(Ink),
+    Erase(Ink),
     Unknown,
 }
 
