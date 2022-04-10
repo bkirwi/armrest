@@ -92,14 +92,38 @@ impl App {
         let mut screen = Screen::new(Framebuffer::new());
         screen.clear();
 
-        let input = None;
         let mut messages = vec![];
-        let view = View {
-            input,
+
+        fn fully_render<W: Widget>(
+            screen: &mut Screen,
+            widget: &mut W,
+            messages: &mut Vec<W::Message>,
+        ) {
+            let mut fixup_count = 0;
+            while screen.fixup() {
+                widget.render(View {
+                    input: None,
+                    messages: messages,
+                    frame: screen.root(),
+                });
+                fixup_count += 1;
+                if fixup_count >= 3 {
+                    eprintln!(
+                        "Bad news: the view has not quiesced after three iterations. \
+                        This should be impossible if the view is stable; either the render method \
+                        of the view is non-deterministic, or you've found a bug."
+                    );
+                    break;
+                }
+            }
+        }
+
+        widget.render(View {
+            input: None,
             messages: &mut messages,
             frame: screen.root(),
-        };
-        widget.render(view);
+        });
+        fully_render(&mut screen, widget, &mut messages);
         screen.refresh_changes();
 
         // Send all input events to input_rx
@@ -178,23 +202,7 @@ impl App {
                     frame: screen.root(),
                 });
                 let render_one_time = Instant::now();
-                let mut fixup_count = 0;
-                while screen.fixup() {
-                    widget.render(View {
-                        input: None,
-                        messages: &mut messages,
-                        frame: screen.root(),
-                    });
-                    fixup_count += 1;
-                    if fixup_count >= 3 {
-                        eprintln!(
-                            "Bad news: the view has not quiesced after three iterations. \
-                        This should be impossible if the view is stable; either the view method \
-                        is non-deterministic, or you've found a bug."
-                        );
-                        break;
-                    }
-                }
+                fully_render(&mut screen, widget, &mut messages);
                 let render_all_time = Instant::now();
                 screen.refresh_changes();
                 should_update = false;

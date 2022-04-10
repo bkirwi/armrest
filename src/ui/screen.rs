@@ -221,13 +221,17 @@ impl Screen {
             let annotation_seq = state.sequence;
             let mut overwritten = false;
             node.visit(annotation.region, |area, draw_seq, content| {
+                // There are two cases that may need fixing up after a single draw call.
+                // First: if an annotation is removed, we need to redraw the region "under" it.
+                // TODO: in theory we can skip if the region was just redrawn anyways,
+                // but that seems to bug, and isn't that important for performance.
                 if removing {
-                    // TODO: if the drawn area is newer than the annotation, we _should_ be able to skip.
-                    // ...but that seems to cause bugs somehow.
+                    // && draw_seq.is_before(annotation_seq)
                     eprintln!("removed! {:?}", area);
                     *content = INVALID_CONTENT;
                     needs_redraw = true;
                 }
+                // Second: if we've redrawn the underlying region, we need to redraw the annotation too.
                 if !removing && annotation_seq.is_before(draw_seq) {
                     eprintln!("overwritten! {:?}", area);
                     overwritten = true;
@@ -239,7 +243,7 @@ impl Screen {
             !removing && !overwritten
         });
 
-        assert!(self.annotations.values().all(|state| !state.stale));
+        debug_assert!(self.annotations.values().all(|state| !state.stale));
 
         needs_redraw
     }
@@ -247,30 +251,28 @@ impl Screen {
     pub fn refresh_changes(&mut self) {
         let last_refresh = self.last_refresh;
 
-        let mut stack = None;
-        fn push_stack(stack: &mut Option<Region>, region: Region) {
+        let mut to_refresh = None;
+        fn request_refresh(stack: &mut Option<Region>, region: Region) {
             *stack = match *stack {
                 None => Some(region),
                 Some(acc) => Some(acc.union(region)),
             };
         }
 
-        let _fb = &mut self.fb;
         let full_screen = Region::new(Point2::origin(), Point2::from_vec(self.size));
-        self.node.visit(full_screen, |region, seq, _| {
-            if last_refresh.is_before(seq) {
-                push_stack(&mut stack, region);
+        self.node.visit(full_screen, |region, sequence, _| {
+            if last_refresh.is_before(sequence) {
+                request_refresh(&mut to_refresh, region);
             }
         });
 
-        for (annotation, state) in &self.annotations {
-            if state.stale || state.sequence.is_before(last_refresh) {
-                continue;
+        for (annotation, &AnnotationState { sequence, stale }) in &self.annotations {
+            if !stale && last_refresh.is_before(sequence) {
+                request_refresh(&mut to_refresh, annotation.region);
             }
-            push_stack(&mut stack, annotation.region);
         }
 
-        for region in stack {
+        for region in to_refresh {
             eprintln!("refresh-region {:?}", region);
             partial_refresh(&mut self.fb, region.rect());
         }
