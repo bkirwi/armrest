@@ -9,7 +9,7 @@ edition = "2018"
 libremarkable = { git = "https://github.com/canselcik/libremarkable", rev = "b19bf2d5431f00f867905113ec761bd92439995d", default-features = false, features = ['framebuffer'] }
 
 #tflite = { path = "../tflite-rs" }
-tflite = { git = "https://github.com/bkirwi/tflite-rs", rev = "573d4ac192af1ec3eaa987d3a5819930f25b7a3d" }
+tflite = { git = "https://github.com/bkirwi/tflite-rs", rev = "4212a1bf33ebbcbf535b162cc591d46c7d054d92" }
 flo_curves = "0.4.1"
 lyon_geom = "0.17.0"
 partial_sort = "0.1.2"
