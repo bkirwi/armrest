@@ -6,10 +6,10 @@ edition = "2018"
 
 [dependencies]
 #libremarkable = { path = "../libremarkable", default-features = false, features = ['framebuffer']}
-libremarkable = { git = "https://github.com/canselcik/libremarkable", rev = "573d4ac192af1ec3eaa987d3a5819930f25b7a3d", default-features = false, features = ['framebuffer'] }
+libremarkable = { git = "https://github.com/canselcik/libremarkable", default-features = false, features = ['framebuffer'] }
 
 #tflite = { path = "../tflite-rs" }
-tflite = { git = "https://github.com/bkirwi/tflite-rs", rev = "4212a1bf33ebbcbf535b162cc591d46c7d054d92" }
+tflite = { git = "https://github.com/bkirwi/tflite-rs", rev = "4212a1bf33ebbcbf535b162cc591d46c7d054d92", optional = true }
 flo_curves = "0.4.1"
 lyon_geom = "0.17.0"
 partial_sort = "0.1.2"
@@ -30,3 +30,14 @@ xdg = "^2.1"
 [dependencies.hyphenation]
 version = "0.8.0"
 features = ["embed_en-us"]
+
+[features]
+default = ["tflite"]
+
+[[bin]]
+name = "ink-to-tensor"
+required-features = ["tflite"]
+
+[[bin]]
+name = "test-tflite"
+required-features = ["tflite"]
