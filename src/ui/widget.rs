@@ -68,6 +68,11 @@ impl<M> Handlers<'_, M> {
         self
     }
 
+    pub fn pad(&mut self, padding: i32) -> &mut Self {
+        self.region = self.region.pad(padding);
+        self
+    }
+
     /// Expand the region uniformly until it's at least the given size along each axis.
     pub fn min_size(&mut self, size: Vector2<i32>) -> &mut Self {
         let current_size = self.region.size();
