@@ -1,14 +1,13 @@
 use crate::geom::Region;
-use crate::ui::{View, Void, Widget};
+use crate::ui::{Canvas, Fragment, View, Void, Widget};
 use itertools::Itertools;
 use libremarkable::cgmath::{Point2, Vector2};
 use libremarkable::framebuffer::common::color;
-use rusttype::{point, Font, PositionedGlyph, Scale};
+use rusttype::{point, Font, Point, PositionedGlyph, Scale};
 use std::collections::hash_map::DefaultHasher;
 use std::fmt::{Debug, Formatter};
 use std::hash::{Hash, Hasher};
 use std::ops::Range;
-use textwrap::core::Fragment;
 
 fn space_width(font: &Font, scale: Scale) -> f32 {
     font.glyph(' ').scaled(scale).h_metrics().advance_width
@@ -55,7 +54,7 @@ impl Debug for Span {
     }
 }
 
-impl Fragment for Span {
+impl textwrap::core::Fragment for Span {
     fn width(&self) -> usize {
         self.width.ceil() as usize
     }
@@ -73,11 +72,54 @@ impl Fragment for Span {
 }
 
 #[derive(Clone)]
+pub struct TextFragment {
+    glyphs: Vec<PositionedGlyph<'static>>,
+    hash: u64,
+    weight: f32,
+}
+
+impl TextFragment {
+    pub fn with_weight(mut self, weight: f32) -> Self {
+        self.weight = weight.min(1.0).max(0.0);
+        self
+    }
+}
+
+impl Hash for TextFragment {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_u64(self.hash);
+        state.write_u32(self.weight.to_bits())
+    }
+}
+
+impl Fragment for TextFragment {
+    fn draw(&self, canvas: &mut Canvas) {
+        for glyph in &self.glyphs {
+            // Draw the glyph into the image per-pixel by using the draw closure
+            if let Some(bounding_box) = glyph.pixel_bounding_box() {
+                glyph.draw(|x, y, v| {
+                    let color = (v * 255.0 * self.weight) as u8;
+                    // The background is already white, so we don't need to draw
+                    // white pixels. Plus it causes problems when characters overlap,
+                    // eg. in italic.
+                    if color > 4 {
+                        canvas.write(
+                            bounding_box.min.x + x as i32,
+                            bounding_box.min.y + y as i32,
+                            color::GRAY(color),
+                        );
+                    }
+                });
+            }
+        }
+    }
+}
+
+#[derive(Clone)]
 pub struct Text<M = Void> {
     size: Vector2<i32>,
     baseline: i32,
-    glyphs: Vec<PositionedGlyph<'static>>,
-    hash: u64,
+    fragment: TextFragment,
     on_input: Vec<(Range<i32>, M)>,
 }
 
@@ -109,6 +151,11 @@ impl<M> Text<M> {
             .wrap(max_width, justify)
     }
 }
+impl Text<Void> {
+    pub fn to_fragment(self) -> TextFragment {
+        self.fragment
+    }
+}
 
 impl<M: Clone> Widget for Text<M> {
     type Message = M;
@@ -126,38 +173,22 @@ impl<M: Clone> Widget for Text<M> {
             view.handlers().relative(region).on_tap(message.clone());
         }
 
-        view.frame.draw(self.hash, |mut canvas| {
+        view.frame.draw(self.fragment.hash, |mut canvas| {
             let underline_y = self.baseline + 2;
+            let underline_color = color::GRAY((255.0 * self.fragment.weight) as u8);
             for (range, _) in &self.on_input {
                 for x in range.clone() {
-                    canvas.write(x, underline_y, color::BLACK);
+                    canvas.write(x, underline_y, underline_color);
                 }
             }
-
-            for glyph in &self.glyphs {
-                // Draw the glyph into the image per-pixel by using the draw closure
-                if let Some(bounding_box) = glyph.pixel_bounding_box() {
-                    glyph.draw(|x, y, v| {
-                        let color = (v * 255.0) as u8;
-                        // The background is already white, so we don't need to draw
-                        // white pixels. Plus it causes problems when characters overlap,
-                        // eg. in italic.
-                        if color > 4 {
-                            canvas.write(
-                                bounding_box.min.x + x as i32,
-                                bounding_box.min.y + y as i32,
-                                color::GRAY(color),
-                            );
-                        }
-                    });
-                }
-            }
+            self.fragment.draw(&mut canvas);
         });
     }
 }
 
 pub struct TextBuilder<'a, M = Void> {
     height: i32,
+    weight: f32,
     baseline: f32,
     indent: f32,
     current_font: &'a Font<'static>,
@@ -174,6 +205,7 @@ impl<'a, M> TextBuilder<'a, M> {
         let baseline = font.v_metrics(Scale::uniform(height as f32)).ascent;
         TextBuilder {
             height,
+            weight: 1.0,
             baseline,
             current_font: font,
             current_scale: height as f32,
@@ -186,6 +218,11 @@ impl<'a, M> TextBuilder<'a, M> {
 
     pub fn font(mut self, font: &'a Font<'static>) -> Self {
         self.current_font = font;
+        self
+    }
+
+    pub fn weight(mut self, weight: f32) -> Self {
+        self.weight = weight;
         self
     }
 
@@ -271,8 +308,11 @@ impl<'a, M> TextBuilder<'a, M> {
         Text {
             size: Vector2::new(word_start.ceil() as i32, self.height),
             baseline: self.baseline.ceil() as i32,
-            glyphs,
-            hash: hasher.finish(),
+            fragment: TextFragment {
+                glyphs,
+                hash: hasher.finish(),
+                weight: self.weight,
+            },
             on_input,
         }
     }
@@ -420,6 +460,7 @@ impl<'a, M> TextBuilder<'a, M> {
 
             result.push(TextBuilder {
                 height: self.height,
+                weight: self.weight,
                 baseline: self.baseline,
                 indent,
                 current_font: self.current_font,
