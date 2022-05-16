@@ -112,8 +112,8 @@ impl<M> Handlers<'_, M> {
                 }
                 Action::Ink(i) if i.len() > 0 => {
                     let size = i.bounds().size();
-                    if size.x < 40
-                        && size.y < 40
+                    if size.x < 10
+                        && size.y < 10
                         && self.region.contains(i.centroid().map(|f| f as i32))
                     {
                         self.messages.push(message);
