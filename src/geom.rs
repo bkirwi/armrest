@@ -1,7 +1,7 @@
 use libremarkable::cgmath::{ElementWise, EuclideanSpace, Point2, Vector2};
 use libremarkable::framebuffer::common::mxcfb_rect;
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Hash, Eq, Debug)]
 pub enum Side {
     Left,
     Right,
@@ -143,8 +143,18 @@ impl Region {
     }
 
     pub fn pad(&self, padding: i32) -> Region {
-        let top_left = self.top_left.sub_element_wise(padding);
-        let bottom_right = self.bottom_right.add_element_wise(padding);
+        let mut top_left = self.top_left.sub_element_wise(padding);
+        let mut bottom_right = self.bottom_right.add_element_wise(padding);
+
+        fn clamp(low: &mut i32, high: &mut i32) {
+            if *low > *high {
+                let mean = (*low + *high) / 2;
+                *low = mean;
+                *high = mean;
+            }
+        }
+        clamp(&mut top_left.x, &mut bottom_right.x);
+        clamp(&mut top_left.y, &mut bottom_right.y);
 
         Region::new(top_left, bottom_right)
     }
