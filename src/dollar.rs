@@ -103,22 +103,29 @@ impl Points {
     }
 
     fn cloud_distance(&self, template: &Points, start: usize, min_so_far: f32) -> f32 {
-        // NB: I'd be a bit surprised if this is truly faster, but following the book for now.
-        let mut unmatched = (0..N_POINTS).collect::<BTreeSet<_>>();
+        // Implementing the set in the paper as an array.
+        // Instead of removing items from the set, we'll swap them to the beginning,
+        // which future iterations will ignore.
+        let mut unmatched = [0; N_POINTS];
+        for i in 0..N_POINTS {
+            unmatched[i] = i;
+        }
         let mut sum = 0.0;
         let mut weight = N_POINTS as f32;
         for loop_index in 0..N_POINTS {
             let i = (loop_index + start) % N_POINTS;
             let mut min = f32::INFINITY;
-            let mut index = 0;
-            for j in unmatched.iter().copied() {
+            let mut unmatched_index = loop_index;
+            for j_index in loop_index..N_POINTS {
+                let j = unmatched[j_index];
                 let d = self.0[i].distance2(template.0[j]);
                 if d < min {
                     min = d;
-                    index = j;
+                    unmatched_index = j_index;
                 }
             }
-            unmatched.remove(&index);
+            // The set-removal swap!
+            unmatched.swap(loop_index, unmatched_index);
             sum += weight * min;
             weight -= 1.0;
 
