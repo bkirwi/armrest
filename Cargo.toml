@@ -6,7 +6,7 @@ edition = "2018"
 
 [dependencies]
 #libremarkable = { path = "../libremarkable", default-features = false, features = ['framebuffer']}
-libremarkable = { git = "https://github.com/canselcik/libremarkable", default-features = false, features = ['framebuffer'] }
+libremarkable = { git = "https://github.com/canselcik/libremarkable", default-features = false, features = ['framebuffer-drawing', 'input'] }
 
 #tflite = { path = "../tflite-rs" }
 tflite = { git = "https://github.com/bkirwi/tflite-rs", rev = "4212a1bf33ebbcbf535b162cc591d46c7d054d92", optional = true }

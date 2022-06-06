@@ -7,7 +7,7 @@ use libremarkable::framebuffer::common::{
     DRAWING_QUANT_BIT,
 };
 use libremarkable::framebuffer::core::Framebuffer;
-use libremarkable::framebuffer::refresh::PartialRefreshMode;
+use libremarkable::framebuffer::PartialRefreshMode;
 use libremarkable::framebuffer::{FramebufferDraw, FramebufferRefresh};
 use std::any::TypeId;
 use std::collections::hash_map::DefaultHasher;

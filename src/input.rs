@@ -1,9 +1,9 @@
 use crate::ink::Ink;
 use libremarkable::cgmath::{EuclideanSpace, MetricSpace, Point2, Vector2};
 
-use libremarkable::input::multitouch::MultitouchEvent;
-use libremarkable::input::wacom::{WacomEvent, WacomPen};
 use libremarkable::input::InputEvent;
+use libremarkable::input::MultitouchEvent;
+use libremarkable::input::{WacomEvent, WacomPen};
 use std::collections::HashMap;
 
 use crate::geom::Side;
