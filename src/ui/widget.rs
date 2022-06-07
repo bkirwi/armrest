@@ -183,6 +183,13 @@ pub trait Widget {
             Side::Top | Side::Bottom => self.size().y,
         };
 
+        assert!(
+            amount >= 0,
+            "Widget has a negative size: {:?} {:?}",
+            split,
+            self.size()
+        );
+
         let widget_area = View {
             input: view.input,
             messages: view.messages,
