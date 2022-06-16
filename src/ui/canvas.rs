@@ -1,5 +1,7 @@
 use crate::geom::Region;
+use std::cell::RefCell;
 
+use cgmath::Vector2;
 use image::RgbImage;
 use libremarkable::cgmath::Point2;
 use libremarkable::framebuffer::common::color;
@@ -57,7 +59,6 @@ impl Fragment for Line {
     }
 }
 
-// #[derive(Hash)]
 pub struct Image {
     pub(crate) data: RgbImage,
     hash: u64,
@@ -85,6 +86,61 @@ impl Fragment for Image {
         for (x, y, pixel) in self.data.enumerate_pixels() {
             let data = pixel.0;
             canvas.write(x as i32, y as i32, color::RGB(data[0], data[1], data[2]));
+        }
+    }
+}
+
+pub struct Cached<T> {
+    fragment: T,
+    cached_render: RefCell<(Vector2<i32>, Vec<u8>)>,
+}
+
+impl<T> Cached<T> {
+    pub fn new(fragment: T) -> Cached<T> {
+        Cached {
+            fragment,
+            cached_render: RefCell::new((Vector2::new(0, 0), vec![])),
+        }
+    }
+}
+
+impl<T: Hash> Hash for Cached<T> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.fragment.hash(state)
+    }
+}
+
+impl<T: Fragment> Fragment for Cached<T> {
+    fn draw(&self, canvas: &mut Canvas) {
+        let bounds = canvas.bounds();
+        if let Ok(mut borrow) = self.cached_render.try_borrow_mut() {
+            let (cached_size, cached_data) = &mut *borrow;
+
+            if bounds.size() == *cached_size {
+                // If our cached data is the right size, splat onto the framebuffer.
+                let result = canvas
+                    .framebuffer()
+                    .restore_region(bounds.rect(), cached_data);
+                if result.is_err() {
+                    self.fragment.draw(canvas);
+                }
+            } else {
+                // Otherwise, blank (to avoid caching any garbage), draw, and dump
+                // for the next time.
+                canvas.framebuffer().fill_rect(
+                    bounds.top_left,
+                    bounds.size().map(|c| c as u32),
+                    color::WHITE,
+                );
+                self.fragment.draw(canvas);
+                if let Ok(data) = canvas.framebuffer().dump_region(bounds.rect()) {
+                    *cached_size = bounds.size();
+                    *cached_data = data;
+                }
+            }
+        } else {
+            // Unlikely, since there should only be one draw happening at once!
+            self.fragment.draw(canvas);
         }
     }
 }
