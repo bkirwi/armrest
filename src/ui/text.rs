@@ -173,7 +173,9 @@ impl<M: Clone> Widget for Text<M> {
             view.handlers().relative(region).on_tap(message.clone());
         }
 
-        view.frame.draw(self.fragment.hash, |mut canvas| {
+        let mut hasher = DefaultHasher::new();
+        self.fragment.hash(&mut hasher);
+        view.frame.draw(hasher.finish(), |mut canvas| {
             let underline_y = self.baseline + 2;
             let underline_color = color::GRAY((255.0 * self.fragment.weight) as u8);
             for (range, _) in &self.on_input {
