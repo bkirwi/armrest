@@ -46,7 +46,7 @@ impl AddAssign<Range> for Range {
 pub struct Ink {
     pub x_range: Range,
     pub y_range: Range,
-    t_range: Range,
+    pub t_range: Range,
     pub(crate) points: Vec<Point3<f32>>,
     pub(crate) stroke_ends: BTreeSet<usize>,
 }
