@@ -69,7 +69,11 @@ impl<M> Handlers<'_, M> {
     }
 
     pub fn pad(&mut self, padding: i32) -> &mut Self {
-        self.region = self.region.pad(padding);
+        self.map_region(|r| r.pad(padding))
+    }
+
+    pub fn map_region(&mut self, map_fn: impl FnOnce(Region) -> Region) -> &mut Self {
+        self.region = map_fn(self.region);
         self
     }
 
