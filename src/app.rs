@@ -64,6 +64,17 @@ impl Wakeup {
 pub trait Applet: Widget {
     type Upstream;
     fn update(&mut self, message: Self::Message) -> Option<Self::Upstream>;
+
+    /// When this value changes, the App code will flash the screen black and
+    /// white before redrawing. This is mostly useful to clear ghosting.
+    ///
+    /// Having the screen constantly flash can be annoying, so it's often best
+    /// to update this value only when you're making large visual changes to
+    /// the screen in any case, as when loading or switching documents in the
+    /// main remarkable app.
+    fn current_route(&self) -> &str {
+        ""
+    }
 }
 
 pub struct App {
@@ -91,7 +102,9 @@ impl App {
         let Component { rx, applet } = component;
         let widget = applet.get_mut();
         let mut screen = Screen::new(Framebuffer::new());
-        screen.clear();
+
+        screen.request_full_refresh();
+        let mut route = widget.current_route().to_string();
 
         let mut messages = vec![];
 
@@ -133,7 +146,7 @@ impl App {
         EvDevContext::new(InputDevice::Wacom, self.input_tx.clone()).start();
         let mut gestures = input::State::new();
 
-        let mut should_update = false;
+        let mut should_render = false;
 
         while let Ok(event) = self.input_rx.recv() {
             let start_time = Instant::now();
@@ -189,20 +202,29 @@ impl App {
                     screen.push_annotation(i);
                 }
 
-                should_update = true;
+                should_render = true;
             }
 
             // We don't want to change anything if the user is currently interacting with the screen.
             if gestures.current_ink().len() == 0 {
                 if let Ok(m) = rx.try_recv() {
                     widget.update(m);
-                    should_update = true;
+                    should_render = true;
+                }
+            }
+
+            // If the section of the app changes, flash the screen before redrawing.
+            {
+                let current_route = widget.current_route();
+                if route != current_route {
+                    screen.request_full_refresh();
+                    route = current_route.to_string()
                 }
             }
 
             let handler_time = Instant::now();
 
-            if should_update {
+            if should_render {
                 widget.render(View {
                     input: None,
                     messages: &mut messages,
@@ -212,7 +234,7 @@ impl App {
                 fully_render(&mut screen, widget, &mut messages);
                 let render_all_time = Instant::now();
                 screen.refresh_changes();
-                should_update = false;
+                should_render = false;
 
                 let draw_time = Instant::now();
                 eprintln!(

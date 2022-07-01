@@ -18,7 +18,7 @@ use std::hash::{Hash, Hasher};
 /// Appropriate between major transitions in the app.
 pub fn full_refresh(fb: &mut Framebuffer) {
     fb.full_refresh(
-        waveform_mode::WAVEFORM_MODE_INIT,
+        waveform_mode::WAVEFORM_MODE_GC16,
         display_temp::TEMP_USE_REMARKABLE_DRAW,
         dither_mode::EPDC_FLAG_USE_DITHERING_ALPHA,
         DRAWING_QUANT_BIT,
@@ -117,7 +117,7 @@ impl DrawTree {
     pub fn new(sequence: Sequence) -> DrawTree {
         DrawTree {
             children: vec![],
-            content: NO_CONTENT,
+            content: INVALID_CONTENT,
             sequence,
         }
     }
@@ -185,6 +185,7 @@ pub struct Screen {
     last_refresh: Sequence,
     annotations: AnnotationMap,
     node: DrawTree,
+    full_refresh_requested: bool,
 }
 
 impl Screen {
@@ -199,6 +200,7 @@ impl Screen {
             last_refresh: sequence,
             annotations: Default::default(),
             node,
+            full_refresh_requested: false,
         }
     }
 
@@ -206,13 +208,10 @@ impl Screen {
         self.size
     }
 
-    pub fn clear(&mut self) {
-        self.annotations.clear();
-        self.node = DrawTree::new(self.sequence.fetch_increment());
-        self.fb.clear();
-        full_refresh(&mut self.fb);
-    }
-
+    // TODO: maybe we're over-refreshing when annotations are involved.
+    // When we change a fragment, we need to redraw the annotations that overlap;
+    // but we don't need to refresh the area outside of the fragment, which was
+    // presumably already fine.
     pub fn fixup(&mut self) -> bool {
         let mut needs_redraw = false;
         let node = &mut self.node;
@@ -247,32 +246,36 @@ impl Screen {
     }
 
     pub fn refresh_changes(&mut self) {
-        let last_refresh = self.last_refresh;
+        if self.full_refresh_requested {
+            full_refresh(&mut self.fb);
+            self.full_refresh_requested = false;
+        } else {
+            let last_refresh = self.last_refresh;
 
-        let mut to_refresh = None;
-        fn request_refresh(stack: &mut Option<Region>, region: Region) {
-            *stack = match *stack {
-                None => Some(region),
-                Some(acc) => Some(acc.union(region)),
-            };
-        }
-
-        let full_screen = Region::new(Point2::origin(), Point2::from_vec(self.size));
-        self.node.visit(full_screen, |region, sequence, _| {
-            if last_refresh.is_before(sequence) {
-                request_refresh(&mut to_refresh, region);
+            let mut to_refresh = None;
+            fn request_refresh(stack: &mut Option<Region>, region: Region) {
+                *stack = match *stack {
+                    None => Some(region),
+                    Some(acc) => Some(acc.union(region)),
+                };
             }
-        });
 
-        for (annotation, &AnnotationState { sequence, stale }) in &self.annotations {
-            if !stale && last_refresh.is_before(sequence) {
-                request_refresh(&mut to_refresh, annotation.region);
+            let full_screen = Region::new(Point2::origin(), Point2::from_vec(self.size));
+            self.node.visit(full_screen, |region, sequence, _| {
+                if last_refresh.is_before(sequence) {
+                    request_refresh(&mut to_refresh, region);
+                }
+            });
+
+            for (annotation, &AnnotationState { sequence, stale }) in &self.annotations {
+                if !stale && last_refresh.is_before(sequence) {
+                    request_refresh(&mut to_refresh, annotation.region);
+                }
             }
-        }
 
-        for region in to_refresh {
-            eprintln!("refresh-region {:?}", region);
-            partial_refresh(&mut self.fb, region.rect());
+            for region in to_refresh {
+                partial_refresh(&mut self.fb, region.rect());
+            }
         }
 
         self.last_refresh = self.sequence;
@@ -298,6 +301,13 @@ impl Screen {
     pub fn quick_draw(&mut self, draw_fn: impl FnOnce(&mut Framebuffer) -> mxcfb_rect) {
         let rect = draw_fn(&mut self.fb);
         quick_refresh(&mut self.fb, rect);
+    }
+
+    /// Render all black to the screen, then all white. This is occasionally
+    /// useful to clear the ghosting that tends to accumulate on an e-ink screen
+    /// over time.
+    pub fn request_full_refresh(&mut self) {
+        self.full_refresh_requested = true;
     }
 
     pub fn root(&mut self) -> Frame {
