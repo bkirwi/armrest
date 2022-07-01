@@ -281,21 +281,19 @@ impl Screen {
         self.last_refresh = self.sequence;
     }
 
-    pub fn push_annotation(&mut self, ink: &Ink) {
-        if ink.len() > 0 {
-            let annotation = Annotation {
-                region: ink.bounds(),
-                content: ink.len() as ContentHash,
-            };
-            let sequence = self.sequence.fetch_increment();
-            self.annotations.insert(
-                annotation,
-                AnnotationState {
-                    sequence,
-                    stale: false,
-                },
-            );
-        }
+    pub fn push_annotation(&mut self, bounds: Region, hash: ContentHash) {
+        let annotation = Annotation {
+            region: bounds,
+            content: hash,
+        };
+        let sequence = self.sequence.fetch_increment();
+        self.annotations.insert(
+            annotation,
+            AnnotationState {
+                sequence,
+                stale: false,
+            },
+        );
     }
 
     pub fn quick_draw(&mut self, draw_fn: impl FnOnce(&mut Framebuffer) -> mxcfb_rect) {
@@ -368,7 +366,7 @@ impl<'a> Frame<'a> {
     pub fn annotate(&mut self, ink: &Ink) {
         if ink.len() != 0 {
             let annotation = Annotation {
-                region: ink.bounds().translate(self.bounds.top_left.to_vec()),
+                region: ink.bounds().translate(self.bounds.top_left.to_vec()).pad(2),
                 content: ink.len() as ContentHash,
             };
 

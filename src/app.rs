@@ -196,10 +196,14 @@ impl App {
                 }
 
                 if let Action::Ink(i) = &a {
-                    screen.push_annotation(i);
+                    if i.len() > 0 {
+                        screen.push_annotation(i.bounds().pad(2), i.len() as u64);
+                    }
                 }
                 if let Action::Erase(i) = &a {
-                    screen.push_annotation(i);
+                    if i.len() > 0 {
+                        screen.push_annotation(i.bounds().pad(20), i.len() as u64);
+                    }
                 }
 
                 should_render = true;
