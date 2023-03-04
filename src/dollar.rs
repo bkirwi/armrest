@@ -89,6 +89,9 @@ impl Points {
     pub fn normalize(ink: &Ink) -> Points {
         let mut result = Self::resample(ink);
         let original_scale = result.scale();
+        if original_scale < 0.0001 {
+            return result;
+        }
         result.scale_by(1.0 / original_scale);
         let new_scale = result.scale();
         assert!(
