@@ -179,6 +179,7 @@ struct AnnotationState {
 type AnnotationMap = HashMap<Annotation, AnnotationState>;
 
 pub struct Screen {
+    pub dither: bool,
     fb: Framebuffer,
     size: Vector2<i32>,
     sequence: Sequence,
@@ -194,6 +195,7 @@ impl Screen {
         let node = DrawTree::new(sequence.fetch_increment());
 
         Screen {
+            dither: false,
             fb,
             size: Vector2::new(DISPLAYWIDTH as i32, DISPLAYHEIGHT as i32),
             sequence,
@@ -274,7 +276,11 @@ impl Screen {
             }
 
             for region in to_refresh {
-                partial_refresh(&mut self.fb, region.rect());
+                if self.dither {
+                    quick_refresh(&mut self.fb, region.rect());
+                } else {
+                    partial_refresh(&mut self.fb, region.rect());
+                }
             }
         }
 
@@ -314,6 +320,7 @@ impl Screen {
         }
 
         Frame {
+            dither: self.dither,
             fb: &mut self.fb,
             bounds: Region::new(Point2::origin(), Point2::origin() + self.size),
             sequence: &mut self.sequence,
@@ -326,6 +333,7 @@ impl Screen {
 }
 
 pub struct Frame<'a> {
+    dither: bool,
     fb: &'a mut Framebuffer,
     pub(crate) bounds: Region,
     sequence: &'a mut Sequence,
@@ -396,6 +404,7 @@ impl<'a> Frame<'a> {
             self.node.content = hash;
             self.node.sequence = self.sequence.fetch_increment();
             draw_fn(Canvas {
+                dither: self.dither,
                 framebuffer: self.fb,
                 bounds: self.bounds,
             });
@@ -447,6 +456,7 @@ impl<'a> Frame<'a> {
         self.index += 1;
 
         Frame {
+            dither: self.dither,
             fb: self.fb,
             bounds: split_bounds,
             node: split_node,

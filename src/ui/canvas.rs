@@ -11,9 +11,19 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
 pub struct Canvas<'a> {
+    pub(crate) dither: bool,
     pub(crate) framebuffer: &'a mut Framebuffer,
     pub(crate) bounds: Region,
 }
+
+// Standard 4x4 bayer dither, with the top-left changed to a 1
+// to make it easier to draw a true black.
+const DITHER_MATRIX: [u8; 16] = [
+    01, 08, 02, 10, //
+    12, 04, 14, 06, //
+    03, 11, 01, 09, //
+    15, 07, 13, 05, //
+];
 
 impl<'a> Canvas<'a> {
     pub fn framebuffer(&mut self) -> &mut Framebuffer {
@@ -32,6 +42,25 @@ impl<'a> Canvas<'a> {
         let point = Point2::new(top_left.x + x, top_left.y + y);
         // NB: this impl already contains the bounds check!
         if point.x < bottom_right.x && point.y < bottom_right.y {
+            let color = if self.dither {
+                let rgb565 = u16::from_le_bytes(color.to_rgb565());
+                let r5 = (rgb565 >> 11) & 0b11111;
+                let g6 = (rgb565 >> 5) & 0b111111;
+                let b5 = rgb565 & 0b11111;
+
+                let offset = ((x as usize & 0b11) << 2) + (y as usize & 0b11);
+                assert!(offset < 16, "offset {}", offset);
+                let level = (r5 + g6 + b5) as u8 >> 3;
+                assert!(level < 16);
+                if level >= DITHER_MATRIX[offset as usize] {
+                    color::WHITE
+                } else {
+                    color::BLACK
+                }
+            } else {
+                color
+            };
+
             self.framebuffer.write_pixel(point, color);
         }
     }

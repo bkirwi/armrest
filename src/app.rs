@@ -80,12 +80,17 @@ pub trait Applet: Widget {
 pub struct App {
     input_tx: mpsc::Sender<InputEvent>,
     input_rx: mpsc::Receiver<InputEvent>,
+    pub dither: bool,
 }
 
 impl App {
     pub fn new() -> App {
         let (input_tx, input_rx) = mpsc::channel();
-        App { input_tx, input_rx }
+        App {
+            input_tx,
+            input_rx,
+            dither: false,
+        }
     }
 
     pub fn size(&self) -> Vector2<i32> {
@@ -102,6 +107,7 @@ impl App {
         let Component { rx, applet } = component;
         let widget = applet.get_mut();
         let mut screen = Screen::new(Framebuffer::new());
+        screen.dither = self.dither;
 
         screen.request_full_refresh();
         let mut route = widget.current_route().to_string();
